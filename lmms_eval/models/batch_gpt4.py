@@ -203,5 +203,5 @@ class BatchGPT4(lmms):
     def list_batches(self, limit=10):
         return self.client.batches.list(limit=limit)
 
-    def generate_until_multi_round(self, requests) -> List[str]:
+    def generate_until_multi_round(self, requests) -> list[str]:
         raise NotImplementedError("TODO: Implement multi-round generation for BatchGPT4")
