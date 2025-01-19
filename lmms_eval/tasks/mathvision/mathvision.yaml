@@ -1,0 +1,6 @@
+group: mathvision
+task:
+  - mathvision_testmini
+  - mathvision_test
+metadata:
+  version: 0.0
