@@ -1,27 +1,22 @@
 # Standard library imports
 import base64
-import json
-import os
-import time
-from copy import deepcopy
 from io import BytesIO
-import hashlib
 import numpy as np
-import requests as url_requests
 
 # Related third-party imports
-from accelerate import Accelerator, DistributedType, InitProcessGroupKwargs
-from accelerate.state import AcceleratorState
+from accelerate import Accelerator
 from loguru import logger as eval_logger
 from vllm import LLM, SamplingParams
 from PIL import Image
 from tqdm import tqdm
 
+from qwen_vl_utils import smart_resize as qwenvl_smart_resize
 # Local application/library specific imports
 from lmms_eval.api.instance import Instance
 from lmms_eval.api.model import lmms
 from lmms_eval.api.registry import register_model
 
+from transformers import AutoConfig
 # Conditional imports
 try:
     from decord import VideoReader, cpu
@@ -48,6 +43,8 @@ class VLLM(lmms):
         self.modality = modality
         self.max_frames_num = max_frames_num
         self.image_token = "<image>"
+        config = AutoConfig.from_pretrained(model_version)
+        self.model_type = config.model_type
 
         self.model = LLM(model=model_version,trust_remote_code=True,limit_mm_per_prompt={"image": limit_img_num},**kwargs)
 
@@ -55,9 +52,17 @@ class VLLM(lmms):
         assert accelerator.state.local_process_index == 0, "VLLM does not support distributed inference."
         assert accelerator.state.num_processes == 1, "VLLM does not support distributed inference."
 
+    def resize_image(self, image: Image):
+        if self.model_type == "qwen2_vl":
+            width, height = image.size
+            resized_height, resized_width = qwenvl_smart_resize(height,width)
+            image = image.resize((resized_width, resized_height))
+        return image
+    
     # Function to encode the image
     def encode_image(self, image: Image):
         output_buffer = BytesIO()
+        image = image.resize((56,56))
         image.save(output_buffer, format="PNG")
         byte_data = output_buffer.getvalue()
         base64_str = base64.b64encode(byte_data).decode("utf-8")
@@ -92,52 +97,37 @@ class VLLM(lmms):
     def generate_until(self, requests):
         # Prepare the batch requests data
         requests_data = []
-        md5 = hashlib.md5()
-        md5.update(str(requests).encode())
-        file_path = os.getenv("HF_HOME", "~/.cache/huggingface") + f"/batchinput_{md5.hexdigest()}.jsonl"
-        if os.path.exists(file_path):
-            #load jsonl
-            eval_logger.info(f"Loading batch input file cache from {file_path}")
-            with open(file_path, "r") as file:
-                for line in file.readlines():
-                    requests_data.append(json.loads(line))
-        else:
-            pbar = tqdm(total=len(requests), disable=(self.rank != 0), desc="Batch Preparing")
-            for idx, (contexts, gen_kwargs, doc_to_visual, doc_id, task, split) in enumerate([reg.args for reg in requests]):
-                visuals = [doc_to_visual(self.task_dict[task][split][doc_id])]
-                visuals = self.flatten(visuals)
-                imgs = []
-                for visual in visuals:
-                    if self.modality == "image":
-                        img = self.encode_image(visual)
-                        imgs.append(img)
-                    elif self.modality == "video":
-                        frames = self.encode_video(visual, self.max_frames_num)
-                        imgs.extend(frames)
 
-                content = []
-                if self.image_token not in contexts:
-                    content.append({"type": "text", "text": contexts})
-                    for img in imgs:
-                        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}})
-                else:
-                    contexts_split = contexts.split(self.image_token)
-                    for idx, context in enumerate(contexts_split):
-                        if idx < len(imgs):
-                            content.append({"type": "text", "text": context})
-                            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{imgs[idx]}"}})
-                    if len(contexts_split) > len(imgs):
-                        content.append({"type": "text", "text": contexts_split[-1]})
-
-                messages = [{"role": "user", "content": content}]
-                requests_data.append(messages)
-                pbar.update(1)
-            #save jsonl
-            eval_logger.info(f"Saving batch input file to {file_path}")
-            with open(file_path, "w") as file:
-                for request_data in requests_data:
-                    file.write(json.dumps(request_data) + "\n")
-
+        pbar = tqdm(total=len(requests), disable=(self.rank != 0), desc="Batch Preparing")
+        for idx, (contexts, gen_kwargs, doc_to_visual, doc_id, task, split) in enumerate([reg.args for reg in requests]):
+            visuals = [doc_to_visual(self.task_dict[task][split][doc_id])]
+            visuals = self.flatten(visuals)
+            imgs = []
+            for visual in visuals:
+                visual = self.resize_image(visual)
+                if self.modality == "image":
+                    img = self.encode_image(visual)
+                    imgs.append(img)
+                elif self.modality == "video":
+                    frames = self.encode_video(visual, self.max_frames_num)
+                    imgs.extend(frames)
+            content = []
+            if self.image_token not in contexts:
+                content.append({"type": "text", "text": contexts})
+                for img in imgs:
+                    content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}})
+            else:
+                contexts_split = contexts.split(self.image_token)
+                for idx, context in enumerate(contexts_split):
+                    if idx < len(imgs):
+                        content.append({"type": "text", "text": context})
+                        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{imgs[idx]}"}})
+                if len(contexts_split) > len(imgs):
+                    content.append({"type": "text", "text": contexts_split[-1]})
+            messages = [{"role": "user", "content": content}]
+            requests_data.append(messages)
+            pbar.update(1)
+        pbar.close()
 
         batch_response = self.create_batch(requests_data)
         return batch_response
