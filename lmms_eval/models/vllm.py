@@ -62,7 +62,6 @@ class VLLM(lmms):
     # Function to encode the image
     def encode_image(self, image: Image):
         output_buffer = BytesIO()
-        image = image.resize((56,56))
         image.save(output_buffer, format="PNG")
         byte_data = output_buffer.getvalue()
         base64_str = base64.b64encode(byte_data).decode("utf-8")

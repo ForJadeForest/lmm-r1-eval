@@ -119,7 +119,6 @@ class VLLMForBoN(lmms):
 
     # Function to encode the image
     def encode_image(self, image: Image):
-        image = image.resize((56, 56))
         output_buffer = BytesIO()
         image.save(output_buffer, format="PNG")
         byte_data = output_buffer.getvalue()
