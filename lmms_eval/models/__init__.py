@@ -57,6 +57,7 @@ AVAILABLE_MODELS = {
     "aria": "Aria",
     "ross": "Ross",
     "vllm": "VLLM",
+    "vllm_bon": "VLLMForBoN"
 }
 
 
