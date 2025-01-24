@@ -3,7 +3,8 @@ import base64
 from io import BytesIO
 import numpy as np
 import torch
-
+import importlib
+import os
 # Related third-party imports
 from accelerate import Accelerator
 from loguru import logger as eval_logger
@@ -31,6 +32,21 @@ try:
 except ImportError:
     eval_logger.warning("Decord is not installed. Video input will not be supported.")
 
+
+def get_rm_head(function_name:str,rm_version:str):
+    cur_path = os.getcwd()
+
+    *module_name, function_name = function_name.split(".")
+    if isinstance(module_name, list):
+        module_name = ".".join(module_name)
+    module_path = os.path.normpath(os.path.join(cur_path, "{}.py".format(module_name.replace(".", "/"))))
+
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    function = getattr(module, function_name)(rm_version)
+    return function
 
 @ray.remote(num_gpus=1, num_cpus=2)
 class LLMActor:
@@ -62,9 +78,11 @@ class VLLMForBoN(lmms):
         self,
         model_version: str = "Qwen/Qwen2-VL-2B-Instruct",
         rm_version: str = "Qwen/Qwen2-VL-2B-Instruct",
-        rm_head: str = "Qwen/Qwen2-VL-2B-Instruct/rm_head.pt",
+        rm_head: str = "rm_head.linear",
         n: int = 8,
         mp: int = 1,
+        step_tag_id: int | None = None,
+        returned_token_ids: list[int] | None = None,
         modality: str = "image",
         max_frames_num: int = 10,
         batch_size: int = None,
@@ -86,6 +104,11 @@ class VLLMForBoN(lmms):
         self.mp = mp
 
         assert self.n % self.mp == 0, "n must be divisible by mp"
+
+        if step_tag_id is not None or returned_token_ids is not None:
+            assert step_tag_id is not None and returned_token_ids is not None, "For prm, step_tag_id and returned_token_ids must be provided together."
+            if isinstance(returned_token_ids,str):
+                returned_token_ids = [int(i) for i in returned_token_ids.split(" ")]
         # Initialize Ray
         ray.init()
         # Create a placement group with one GPU and one CPU per bundle
@@ -101,11 +124,17 @@ class VLLMForBoN(lmms):
                 model=model_version, trust_remote_code=True, limit_mm_per_prompt={"image": limit_img_num}, **kwargs
             )
             self.models.append(actor)
+        if step_tag_id is None:
+            # use orm
+            pooler_config = PoolerConfig(pooling_type="LAST")
+        else:
+            # use prm
+            pooler_config = PoolerConfig(pooling_type="STEP", step_tag_id=step_tag_id, returned_token_ids=returned_token_ids,softmax=True,normalize=False)
         self.rm = LLMActor.options(scheduling_strategy=PlacementGroupSchedulingStrategy(placement_group=rm_pg, placement_group_bundle_index=0)).remote(
-            model=rm_version, trust_remote_code=True, limit_mm_per_prompt={"image": limit_img_num}, task="reward", override_pooler_config=PoolerConfig(pooling_type="LAST"), **kwargs
+            model=rm_version, trust_remote_code=True, limit_mm_per_prompt={"image": limit_img_num}, task="reward", override_pooler_config=pooler_config, **kwargs
         )
         self.rm_processor = AutoProcessor.from_pretrained(rm_version)
-        self.rm_head = torch.load(rm_head, weights_only=False)
+        self.rm_head = get_rm_head(rm_head,rm_version)
         accelerator = Accelerator()
         assert accelerator.state.local_process_index == 0, "VLLM does not support distributed inference."
         assert accelerator.state.num_processes == 1, "VLLM does not support distributed inference."
@@ -120,6 +149,7 @@ class VLLMForBoN(lmms):
     # Function to encode the image
     def encode_image(self, image: Image):
         output_buffer = BytesIO()
+        image = image.resize((56,56))
         image.save(output_buffer, format="PNG")
         byte_data = output_buffer.getvalue()
         base64_str = base64.b64encode(byte_data).decode("utf-8")
@@ -212,8 +242,8 @@ class VLLMForBoN(lmms):
         hidden_states = self.rm.encode.remote(rm_inputs)
         hidden_states = ray.get(hidden_states)
         hidden_states = [h.outputs.data for h in hidden_states]
-        hidden_states = torch.stack(hidden_states)  # [sample_num*n, dim]
-        hidden_states = hidden_states.view(len(requests_data), self.n, -1)  # [sample_num, n, dim]
+        hidden_states = torch.stack(hidden_states)  # [sample_num*n, ...]
+        hidden_states = hidden_states.view(len(requests_data), self.n, -1)  # [sample_num, n, ...]
         rewards = self.rm_head(hidden_states).squeeze(-1)  # [sample_num, n]
         best_indexes = torch.argmax(rewards, dim=-1)  # [sample_num]
 
