@@ -143,7 +143,7 @@ class VLLM(lmms):
 
     def create_batch(self, requests_data,all_imgs):
         sampling_params =SamplingParams(temperature=0,max_tokens=4096)
-        prompts = self.processor.apply_chat_template(requests_data,tokenize=False, add_generation_prompt=False)
+        prompts = self.processor.apply_chat_template(requests_data,tokenize=False, add_generation_prompt=True)
         responses = self.model.generate([{"prompt":p,"multi_modal_data":{"image":imgs}} for p,imgs in zip(prompts,all_imgs)],sampling_params=sampling_params)
         return [r.outputs[0].text for r in responses]
 
