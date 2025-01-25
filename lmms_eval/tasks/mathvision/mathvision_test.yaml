@@ -21,4 +21,7 @@ metric_list:
 
 lmms_eval_specific_kwargs:
   default:
-    shot_type: "reason-first" # can be "reason-first", "solution", "step-by-step"
+    shot_type: "step-by-step" # can be "reason-first", "solution", "step-by-step"
+    shot: 0
+    use_caption: False
+    use_ocr: False

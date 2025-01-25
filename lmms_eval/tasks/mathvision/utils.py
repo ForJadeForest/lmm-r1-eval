@@ -1,17 +1,46 @@
 import os
 import json
-from tqdm import tqdm
 from latex2sympy2 import latex2sympy
-import numpy as np
 import re
-from copy import deepcopy
 import time  # 引入time模块
 from math import *
-
+from pathlib import Path
+import yaml
 import json
 from tqdm import tqdm  # Assuming tqdm is imported to show progress bar
 import time
 from lmms_eval.tasks._task_utils.file_utils import generate_submission_file
+from lmms_eval.tasks.mathvision.mathvision_evals import MathVisionEvaluator
+
+with open(Path(__file__).parent / "mathvision.yaml", "r") as f:
+    raw_data = f.readlines()
+    safe_data = []
+    for i, line in enumerate(raw_data):
+        # remove function definition since yaml load cannot handle it
+        if "!function" not in line:
+            safe_data.append(line)
+
+    config = yaml.safe_load("".join(safe_data))
+
+
+API_TYPE = os.getenv("API_TYPE", "openai")
+if API_TYPE == "openai":
+    API_URL = os.getenv("OPENAI_API_URL", "https://api.openai.com/v1/chat/completions")
+    API_KEY = os.getenv("OPENAI_API_KEY", "YOUR_API_KEY")
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json",
+    }
+elif API_TYPE == "azure":
+    API_URL = os.getenv("AZURE_ENDPOINT", "https://api.cognitive.microsoft.com/sts/v1.0/issueToken")
+    API_KEY = os.getenv("AZURE_API_KEY", "YOUR_API_KEY")
+    headers = {
+        "api-key": API_KEY,
+        "Content-Type": "application/json",
+    }
+
+mathvision_evaluator = MathVisionEvaluator(api_key=API_KEY, gpt_model=config["metadata"]["gpt_eval_model_name"])
+
 def timestamp() -> str:
     nowtime = time.strftime('-%Y%m%d-%H%M', time.localtime(time.time()))
     print(nowtime)  
@@ -435,21 +464,36 @@ def mathvision_doc_to_visual(doc):
 
 
 def mathvision_doc_to_text(doc, lmms_eval_specific_kwargs=None):
-    example = doc
-    question = example['question']
-    options = ''
-    if len(example['options']) > 0:
-        assert len(example['options']) == 5, example
-        if ''.join(example['options']) != 'ABCDE':
-            options = f"(A) {example['options'][0]}\n(B) {example['options'][1]}\n(C) {example['options'][2]}\n(D) {example['options'][3]}\n(E) {example['options'][4]}\n"
-    
-    question = re.sub(r'<image\d+>', r'<image>', question)
-    input = 'Please solve the problem and put your answer in one "\\boxed{}". If it is a multiple choice question, only one letter is allowed in the "\\boxed{}".\n'+f"{question}\n{options}"
-    return input
+    query_prompt = mathvision_evaluator.create_one_query(
+        doc,
+        shot_num=lmms_eval_specific_kwargs["shot"],
+        shot_type=lmms_eval_specific_kwargs["shot_type"],
+        use_caption=lmms_eval_specific_kwargs["use_caption"],
+        use_ocr=lmms_eval_specific_kwargs["use_ocr"],
+    )
+    query_prompt = re.sub(r'<image\d+>', r'<image>', query_prompt)
+    return query_prompt
 
 def mathvision_process_results(doc, results):
     response = results[0].strip()
     raw_exampe = doc
+    choices = doc.get("options", [])
+    answer = doc["answer"]
+    precision = None
+    if len(choices) == 0:
+        question_type = "free-form"
+        if answer.isnumeric():
+            answer_type = "integer"
+        else:
+            try:
+                float(answer)
+                answer_type = "float"
+                precision = len(answer.split(".")[1])
+            except:
+                answer_type = "text"
+    else:
+        question_type = "multi_choice"
+        answer_type = "text"
 
     gt_answer = str(raw_exampe['answer'])
     if len(raw_exampe['options']) > 0:
@@ -457,26 +501,8 @@ def mathvision_process_results(doc, results):
     else:
         gt_answer_value = ''
 
-    model_answer = response
-    for c in 'ABCDE':
-        if model_answer.endswith(f" {c}.") or model_answer.endswith(f" ({c}).") or model_answer.startswith(f"{c}\n") or model_answer.startswith(f"({c})\n") or model_answer.startswith(f"({c}) {c}\n"):
-            model_answer = c
-    if is_number(model_answer.split('is ')[-1].rstrip('.')):
-        model_answer = model_answer.split('is ')[-1].rstrip('.')
-    if 'oxed{' not in model_answer:
-        for flag in ['the final answer is', 'the answer is', 'the correct answer is', 'the answer should be']:
-            raw_model_answer = model_answer
-            model_answer = model_answer.split(flag)[-1].strip()
-            if flag in raw_model_answer:
-                model_answer = model_answer.split('\n')[0].split('. ')[0]
-            flag = flag.replace('the', 'The')
-            raw_model_answer = model_answer
-            model_answer = model_answer.split(flag)[-1].strip()
-            if flag in raw_model_answer:
-                model_answer = model_answer.split('\n')[0].split('. ')[0]
-    elif model_answer.count('oxed{') > 1:
-        model_answer = '\\boxed{' + model_answer.split('oxed{')[-1]
-                
+    extraction = mathvision_evaluator.extract_answer(response, doc, config["metadata"]["quick_extract"])
+    model_answer = mathvision_evaluator.normalize_extracted_answer(extraction, choices, question_type, answer_type, precision) or extraction
     model_answer = find_math_answer(model_answer).replace('(a)', 'a').replace('(b)', 'b').replace('(c)', 'c').replace('(d)', 'd').replace('(e)', 'e').replace('{a}', 'a').replace('{b}', 'b').replace('{c}', 'c').replace('{d}', 'd').replace('{e}', 'e').rstrip('.').lstrip(':').strip()
 
     correct = is_equal(gt_answer, model_answer) or is_equal(gt_answer_value, model_answer)

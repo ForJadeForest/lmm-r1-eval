@@ -1,4 +1,4 @@
-TASK="mathvista_testmini_solution"
+TASK="mathvision_test"
 MODEL_VERSION="ckpts/Qwen2-VL-2B-Instruct"
 MODALITIES=image
 export HF_ENDPOINT="https://hf-mirror.com"

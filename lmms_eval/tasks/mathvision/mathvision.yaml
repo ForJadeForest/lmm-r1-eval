@@ -4,3 +4,5 @@ task:
   - mathvision_test
 metadata:
   version: 0.0
+  gpt_eval_model_name: "ckpts/Qwen2.5-7B-Instruct"
+  quick_extract: false
