@@ -16,7 +16,7 @@ from lmms_eval.api.instance import Instance
 from lmms_eval.api.model import lmms
 from lmms_eval.api.registry import register_model
 
-from transformers import AutoConfig
+from transformers import AutoConfig, AutoProcessor
 # Conditional imports
 try:
     from decord import VideoReader, cpu
@@ -47,7 +47,7 @@ class VLLM(lmms):
         self.model_type = config.model_type
 
         self.model = LLM(model=model_version,trust_remote_code=True,limit_mm_per_prompt={"image": limit_img_num},**kwargs)
-
+        self.processor = AutoProcessor.from_pretrained(model_version)
         accelerator = Accelerator()
         assert accelerator.state.local_process_index == 0, "VLLM does not support distributed inference."
         assert accelerator.state.num_processes == 1, "VLLM does not support distributed inference."
@@ -55,7 +55,7 @@ class VLLM(lmms):
     def resize_image(self, image: Image):
         if self.model_type == "qwen2_vl":
             width, height = image.size
-            resized_height, resized_width = qwenvl_smart_resize(height,width)
+            resized_height, resized_width = qwenvl_smart_resize(height,width,max_pixels=1024*1024)
             image = image.resize((resized_width, resized_height))
         return image
     
@@ -96,7 +96,7 @@ class VLLM(lmms):
     def generate_until(self, requests):
         # Prepare the batch requests data
         requests_data = []
-
+        all_imgs = []
         pbar = tqdm(total=len(requests), disable=(self.rank != 0), desc="Batch Preparing")
         for idx, (contexts, gen_kwargs, doc_to_visual, doc_id, task, split) in enumerate([reg.args for reg in requests]):
             visuals = [doc_to_visual(self.task_dict[task][split][doc_id])]
@@ -104,31 +104,35 @@ class VLLM(lmms):
             imgs = []
             for visual in visuals:
                 visual = self.resize_image(visual)
+                '''
                 if self.modality == "image":
                     img = self.encode_image(visual)
                     imgs.append(img)
                 elif self.modality == "video":
                     frames = self.encode_video(visual, self.max_frames_num)
                     imgs.extend(frames)
+                '''
+                imgs.append(visual)
             content = []
             if self.image_token not in contexts:
-                content.append({"type": "text", "text": contexts})
                 for img in imgs:
-                    content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}})
+                    content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,fake"}})
+                content.append({"type": "text", "text": contexts})
             else:
                 contexts_split = contexts.split(self.image_token)
                 for idx, context in enumerate(contexts_split):
                     if idx < len(imgs):
                         content.append({"type": "text", "text": context})
-                        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{imgs[idx]}"}})
+                        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,fake"}})
                 if len(contexts_split) > len(imgs):
                     content.append({"type": "text", "text": contexts_split[-1]})
             messages = [{"role": "user", "content": content}]
             requests_data.append(messages)
+            all_imgs.append(imgs)
             pbar.update(1)
         pbar.close()
 
-        batch_response = self.create_batch(requests_data)
+        batch_response = self.create_batch(requests_data,all_imgs)
         return batch_response
         
 
@@ -137,9 +141,10 @@ class VLLM(lmms):
         assert False, "VLLM not support"
 
 
-    def create_batch(self, requests_data):
+    def create_batch(self, requests_data,all_imgs):
         sampling_params =SamplingParams(temperature=0,max_tokens=4096)
-        responses = self.model.chat(requests_data,sampling_params=sampling_params)
+        prompts = self.processor.apply_chat_template(requests_data,tokenize=False, add_generation_prompt=False)
+        responses = self.model.generate([{"prompt":p,"multi_modal_data":{"image":imgs}} for p,imgs in zip(prompts,all_imgs)],sampling_params=sampling_params)
         return [r.outputs[0].text for r in responses]
 
 
