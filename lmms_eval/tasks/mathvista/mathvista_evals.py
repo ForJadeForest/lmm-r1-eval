@@ -177,7 +177,7 @@ class MathVistaEvaluator:
         response.raise_for_status()
         return response.json()
 
-    def get_chat_response(self, prompt, temperature=0, max_tokens=256, n=1, patience=5, sleep_time=0):
+    def get_chat_response(self, prompt, temperature=0, max_tokens=256, n=1, patience=5, sleep_time=3):
         messages = [
             {"role": "user", "content": prompt},
         ]
@@ -225,7 +225,7 @@ class MathVistaEvaluator:
 
     def create_test_prompt(self, demo_prompt, query, response):
         demo_prompt = demo_prompt.strip()
-        test_prompt = f"{query}\n\n{response}"
+        test_prompt = f"{query}\n\nModel response: {response}"
         full_prompt = f"{demo_prompt}\n\n{test_prompt}\n\nExtracted answer: "
         return full_prompt
 
