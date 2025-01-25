@@ -7,7 +7,7 @@ import sys
 import traceback
 import warnings
 from functools import partial
-
+from multiprocessing import set_start_method
 import numpy as np
 import yaml
 
@@ -315,9 +315,9 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
         args_list.append(args)
 
     # initialize Accelerator
-    kwargs_handler = InitProcessGroupKwargs(timeout=datetime.timedelta(seconds=60000))
-    accelerator = Accelerator(kwargs_handlers=[kwargs_handler])
-    if accelerator.is_main_process:
+    #kwargs_handler = InitProcessGroupKwargs(timeout=datetime.timedelta(seconds=60000))
+    #accelerator = Accelerator(kwargs_handlers=[kwargs_handler])
+    if True:#:accelerator.is_main_process:
         is_main_process = True
     else:
         is_main_process = False
@@ -330,7 +330,7 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
             results, samples = cli_evaluate_single(args)
             results_list.append(results)
 
-            accelerator.wait_for_everyone()
+            #accelerator.wait_for_everyone()
             if is_main_process and args.wandb_args:
                 try:
                     wandb_logger.post_init(results)
