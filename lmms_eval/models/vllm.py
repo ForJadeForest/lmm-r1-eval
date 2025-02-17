@@ -23,7 +23,18 @@ try:
 except ImportError:
     eval_logger.warning("Decord is not installed. Video input will not be supported.")
 
+SYSTEM_PROMPT_R1='You are a helpful assistant good at solving math problems with step-by-step reasoning. You should first thinks about the reasoning process in the mind and then provides the user with the answer. Your answer must be in latex format and wrapped in $...$.The reasoning process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., <think> Since $1+1=2$, so the answer is $2$. </think><answer> $2$ </answer>, which means your output should start with <think> and end with </answer>.'
 
+SYSTEM_PROMPT_BASE_R1 = (
+    "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant "
+    "first thinks about the reasoning process in the mind and then provides the user with the answer. The answer is in latex format and wrapped in $...$."
+    "The reasoning process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., "
+    "<think> Since $1+1=2$, so the answer is $2$. </think><answer> $2$ </answer>, which means assistant's output should start with <think> and end with </answer>.\nUser: __PROMPT__\n\nAssistant: "
+)
+
+SYSTEM_PROMPT_COT='You are a helpful assistant good at solving math problems. The user will provide you with a math problem, and you should solve it with step-by-step reasoning. You should put your final answer within $\\boxed{}$.'
+
+SYSTEM_PROMPT_BASE_COT = 'A conversation between User and Assistant good at solving math problems. The user asks a question, and the Assistant solves it with step-by-step reasoning. The answer is enclosed within $\\boxed{}$. \nUser: __PROMPT__\n\nAssistant: '
 @register_model("vllm")
 class VLLM(lmms):
     def __init__(
@@ -33,6 +44,7 @@ class VLLM(lmms):
         max_frames_num: int = 10,
         batch_size:int = None,
         limit_img_num:int = 1,
+        system_prompt_type:str = None,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -42,6 +54,19 @@ class VLLM(lmms):
         self.model_version = model_version
         self.modality = modality
         self.max_frames_num = max_frames_num
+        self.system_prompt_type = system_prompt_type
+        self.system_prompt = None
+        if system_prompt_type:
+            if system_prompt_type == 'r1':
+                self.system_prompt = SYSTEM_PROMPT_R1
+            elif system_prompt_type == 'cot':
+                self.system_prompt = SYSTEM_PROMPT_COT
+            elif system_prompt_type == 'base_r1':
+                self.system_prompt = SYSTEM_PROMPT_BASE_R1
+            elif system_prompt_type == 'base_cot':
+                self.system_prompt = SYSTEM_PROMPT_BASE_COT
+            else:
+                raise ValueError(f"Unknown system prompt type: {system_prompt_type}")
         self.image_token = "<image>"
         config = AutoConfig.from_pretrained(model_version)
         self.model_type = config.model_type
@@ -53,7 +78,7 @@ class VLLM(lmms):
         assert accelerator.state.num_processes == 1, "VLLM does not support distributed inference."
 
     def resize_image(self, image: Image):
-        if self.model_type == "qwen2_vl":
+        if self.model_type in ["qwen2_vl","qwen2_5_vl"]:
             width, height = image.size
             resized_height, resized_width = qwenvl_smart_resize(height,width,max_pixels=1024*1024)
             image = image.resize((resized_width, resized_height))
@@ -126,7 +151,11 @@ class VLLM(lmms):
                         content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,fake"}})
                 if len(contexts_split) > len(imgs):
                     content.append({"type": "text", "text": contexts_split[-1]})
-            messages = [{"role": "user", "content": content}]
+            if self.system_prompt:
+                messages = [{"role":"system","content":self.system_prompt}]
+            else:
+                messages = []
+            messages.append({"role": "user", "content": content})
             requests_data.append(messages)
             all_imgs.append(imgs)
             pbar.update(1)
@@ -144,7 +173,7 @@ class VLLM(lmms):
     def create_batch(self, requests_data,all_imgs):
         sampling_params =SamplingParams(temperature=0,max_tokens=4096)
         prompts = self.processor.apply_chat_template(requests_data,tokenize=False, add_generation_prompt=True)
-        responses = self.model.generate([{"prompt":p,"multi_modal_data":{"image":imgs}} for p,imgs in zip(prompts,all_imgs)],sampling_params=sampling_params)
+        responses = self.model.generate([{"prompt":p,"multi_modal_data":{"image":imgs}} if imgs else p for p,imgs in zip(prompts,all_imgs)],sampling_params=sampling_params)
         return [r.outputs[0].text for r in responses]
 
 

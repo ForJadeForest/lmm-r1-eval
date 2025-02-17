@@ -104,11 +104,13 @@ class MathVerseEvaluator:
         response.raise_for_status()
         return response.json()
 
-    def get_chat_response(self, prompt, temperature=0, max_tokens=256, n=1, patience=10000000, sleep_time=0):
+    def get_chat_response(self, prompt, temperature=0, max_tokens=256, n=1, patience=10000000, sleep_time=0,extra_parameters=None):
         messages = [
             {"role": "user", "content": prompt},
         ]
         payload = {"model": self.gpt_model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens, "n": n}
+        if extra_parameters:
+            payload.update(extra_parameters)
 
         while patience > 0:
             patience -= 1
@@ -191,10 +193,14 @@ class MathVerseEvaluator:
         try:
             full_prompt = self.create_match_prompt(DEMO_PROMPT_SCORE, question, answer, extraction)
             while True:
-                extraction = self.get_chat_response(full_prompt, temperature=0, max_tokens=8, n=1)
+                extraction = self.get_chat_response(full_prompt, temperature=0.6, max_tokens=8, n=1,extra_parameters={"guided_choice":["0","1"]})
                 judgement = extraction.replace("Judgement:", "").strip()
-                if judgement.strip() in ["0", "1"]:
-                    return int(judgement) == 1
+                if "1" in judgement:
+                    return 1
+                elif "0" in judgement:
+                    return 0
+                else:
+                    print(judgement)
 
         except Exception as e:
             print(e)

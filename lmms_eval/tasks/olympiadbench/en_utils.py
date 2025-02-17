@@ -9,10 +9,9 @@ from lmms_eval.tasks.olympiadbench.olympiadbench_evals import OlympiadBenchEvalu
 
 dir_name = os.path.dirname(os.path.abspath(__file__))
 
-try:
-    olympiadbench_evaluator = OlympiadBenchEvaluator()
-except:
-    pass
+
+olympiadbench_evaluator = OlympiadBenchEvaluator()
+
 
 
 def olympiadbench_doc_to_visual(doc):
