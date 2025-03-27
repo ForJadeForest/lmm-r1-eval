@@ -1,11 +1,12 @@
 #!/bin/bash
 
 # Configuration parameters - modify this section
-export MODEL_CKPT="/path/to/your/model"  # Change to your model path
+export MODEL_CKPT="VLM-Reasoner/LMM-R1-MGT-PerceReason"
 export GPU_ID="0"  # GPU ID to use
 
 # Evaluation tasks
-TASKS="custom|gpqa:diamond|0|0,custom|math_500|0|0"
+
+TASKS="custom|math_500|0|0,custom|gpqa:diamond|0|0"
 LOG_DIR="./eval_results"
 
 # Define color codes
@@ -21,8 +22,11 @@ BOLD='\033[1m'
 # Install dependencies
 echo -e "${BLUE}Installing necessary dependencies...${NC}"
 
+
 pip install antlr4-python3-runtime==4.11
-pip install git+https://github.com/huggingface/lighteval.git
+pip install git+https://github.com/huggingface/lighteval.git@ed084813e0bd12d82a06d9f913291fdbee774905
+pip install vllm==0.7.3
+pip install transformers==4.49.0
 
 # Print running parameters
 echo -e "${BLUE}============================================${NC}"
@@ -51,7 +55,7 @@ run_evaluation() {
     export CUDA_VISIBLE_DEVICES=$GPU_ID
     
     # Set model parameters
-    MODEL_ARGS="pretrained=$model_dir,dtype=bfloat16,max_model_length=32768,gpu_memory_utilization=0.75,data_parallel_size=1,generation_parameters={max_new_tokens:8192,temperature:0,top_p:1.0}"
+    MODEL_ARGS="pretrained=$model_dir,dtype=bfloat16,max_model_length=32768,gpu_memory_utilization=0.75,data_parallel_size=1,generation_parameters={max_new_tokens:8192,temperature:0,top_p:1.0,repetition_penalty:1.05}"
     
     # Run evaluation
     CUDA_VISIBLE_DEVICES=$GPU_ID lighteval vllm $MODEL_ARGS "$TASKS" \
@@ -68,12 +72,6 @@ run_evaluation() {
     fi
 }
 
-# Check if model path is valid
-if [ ! -d "$MODEL_CKPT" ]; then
-    echo -e "${RED}Error: Model path does not exist: $MODEL_CKPT${NC}"
-    echo -e "${YELLOW}Please modify the MODEL_CKPT variable in the script to point to a valid model path${NC}"
-    exit 1
-fi
 
 # Start evaluation
 echo -e "${BLUE}Starting model evaluation...${NC}"
