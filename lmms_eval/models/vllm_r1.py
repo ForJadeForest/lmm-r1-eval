@@ -47,6 +47,7 @@ class VLLMR1(lmms):
         trust_remote_code: Optional[bool] = True,
         system_prompt: Optional[str] = None,
         extract_answer: Optional[bool] = False,
+        place_image_first: Optional[bool] = False,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -57,8 +58,9 @@ class VLLMR1(lmms):
         self.max_images = max_images
         self.max_frame_num = max_frame_num
         self.threads = threads
+        self.place_image_first = place_image_first
 
-        init_params = ["model_version", "tensor_parallel_size", "gpu_memory_utilization", "batch_size", "timeout", "max_images", "max_videos", "max_audios", "max_frame_num", "threads", "trust_remote_code"]
+        init_params = ["model_version", "tensor_parallel_size", "gpu_memory_utilization", "batch_size", "timeout", "max_images", "max_videos", "max_audios", "max_frame_num", "threads", "trust_remote_code", "place_image_first"]
 
         # filter out the parameters already defined in __init__ to pass options to VLLM
         # this enables support for all VLLM Engine args:
@@ -208,13 +210,32 @@ class VLLMR1(lmms):
                             imgs.append(task.result())
                 messages = [{"role": "system", "content": self.system_prompt}] if self.system_prompt else []
                 messages.append({"role": "user", "content": []})
-                # When there is no image token in the context, append the image to the text
-                if contexts is not None:
-                    messages[-1]["content"].append({"type": "text", "text": contexts})
-                for img in imgs:
-                    messages[-1]["content"].append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}})
+                # Arrange content based on place_image_first parameter
+                if self.place_image_first:
+                    # Place images before text
+                    for img in imgs:
+                        messages[-1]["content"].append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}})
+                    if contexts is not None:
+                        messages[-1]["content"].append({"type": "text", "text": contexts})
+                else:
+                    # Default behavior: text first, then images
+                    if contexts is not None:
+                        messages[-1]["content"].append({"type": "text", "text": contexts})
+                    for img in imgs:
+                        messages[-1]["content"].append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}})
 
                 batched_messages.append(messages)
+            # print a demo message (truncate base64 image data)
+            if self.rank == 0 and len(batched_messages) > 0:
+                demo_msg = batched_messages[0].copy()
+                # Truncate base64 image data in the demo message
+                if len(demo_msg) > 0 and "content" in demo_msg[-1]:
+                    for content in demo_msg[-1]["content"]:
+                        if isinstance(content, dict) and content.get("type") == "image_url":
+                            base64_data = content["image_url"]["url"].split(",")[-1]
+                            content["image_url"]["url"] = f"data:image/png;base64,{base64_data[:30]}..."
+                print(f"Demo message: {demo_msg}")
+            
 
             response = self.client.chat(sampling_params=sampling_params, messages=batched_messages)
             response_text = [o.outputs[0].text for o in response]
