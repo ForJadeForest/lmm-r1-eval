@@ -227,7 +227,7 @@ class VLLMR1(lmms):
                 batched_messages.append(messages)
             # print a demo message (truncate base64 image data)
             if self.rank == 0 and len(batched_messages) > 0:
-                demo_msg = batched_messages[0].copy()
+                demo_msg = deepcopy(batched_messages[0])
                 # Truncate base64 image data in the demo message
                 if len(demo_msg) > 0 and "content" in demo_msg[-1]:
                     for content in demo_msg[-1]["content"]:
