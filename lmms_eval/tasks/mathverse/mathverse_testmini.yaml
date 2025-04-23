@@ -32,7 +32,7 @@ metric_list:
 lmms_eval_specific_kwargs:
   default:
     shot_type: "format-prompt" # can also be "custom-prompt"
-    query_type: "query_wo" # now only support query_wo
+    query_type: "question"
 model_specific_generation_kwargs:
   llava:
     image_aspect_ratio: original
