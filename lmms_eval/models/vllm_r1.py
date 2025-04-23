@@ -93,7 +93,7 @@ class VLLMR1(lmms):
         config = AutoConfig.from_pretrained(model_version)
         self.model_type = config.model_type
         self.system_prompt = system_prompt
-        self.extract_answer = extract_answer
+        self.enable_extract_answer = extract_answer
         
     def resize_image(self, image: Image):
         if self.model_type in ["qwen2_vl","qwen2_5_vl"]:
@@ -125,7 +125,7 @@ class VLLMR1(lmms):
         <answer>xxx</answer>
         Extract xxx from the pattern.
         """
-        if self.extract_answer:
+        if self.enable_extract_answer:
             answer_pattern = r"<answer>(.*?)</answer>"
             match = re.search(answer_pattern, response)
             if match:
@@ -175,8 +175,6 @@ class VLLMR1(lmms):
                 contexts, gen_kwargs, doc_to_visual, doc_id, task, split = batch_requests[idx].arguments
                 if "max_new_tokens" not in gen_kwargs:
                     gen_kwargs["max_new_tokens"] = 1024
-                if gen_kwargs["max_new_tokens"] > 4096:
-                    gen_kwargs["max_new_tokens"] = 4096
                 if "temperature" not in gen_kwargs:
                     gen_kwargs["temperature"] = 0
                 if "top_p" not in gen_kwargs:
@@ -211,9 +209,10 @@ class VLLMR1(lmms):
                 messages = [{"role": "system", "content": self.system_prompt}] if self.system_prompt else []
                 messages.append({"role": "user", "content": []})
                 # When there is no image token in the context, append the image to the text
-                messages[0]["content"].append({"type": "text", "text": contexts})
+                if contexts is not None:
+                    messages[-1]["content"].append({"type": "text", "text": contexts})
                 for img in imgs:
-                    messages[0]["content"].append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}})
+                    messages[-1]["content"].append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}})
 
                 batched_messages.append(messages)
 
