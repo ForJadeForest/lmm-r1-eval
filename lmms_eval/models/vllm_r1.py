@@ -215,11 +215,11 @@ class VLLMR1(lmms):
                     # Place images before text
                     for img in imgs:
                         messages[-1]["content"].append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}})
-                    if contexts is not None:
+                    if contexts:
                         messages[-1]["content"].append({"type": "text", "text": contexts})
                 else:
                     # Default behavior: text first, then images
-                    if contexts is not None:
+                    if contexts:
                         messages[-1]["content"].append({"type": "text", "text": contexts})
                     for img in imgs:
                         messages[-1]["content"].append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}})
