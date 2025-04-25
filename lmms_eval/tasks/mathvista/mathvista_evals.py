@@ -169,14 +169,14 @@ class MathVistaEvaluator:
             "Content-Type": "application/json",
         }
         client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
-        gpt_model = config["metadata"]["gpt_eval_model_name"]
+        gpt_model = os.getenv("MODEL_VERSION", "gpt-4o-mini")
 
     elif API_TYPE == "azure":
         API_URL = os.getenv("AZURE_ENDPOINT", "https://api.cognitive.microsoft.com/sts/v1.0/issueToken")
         API_KEY = os.getenv("AZURE_API_KEY", "YOUR_API_KEY")
         API_VERSION = os.getenv("AZURE_API_VERSION", "2023-07-01-preview")
         client = AzureOpenAI(azure_endpoint=API_URL, api_version=API_VERSION, api_key=API_KEY)
-        gpt_model = os.getenv("MODEL_VERSION", "gpt-4o-2024-11-20")
+        gpt_model = os.getenv("MODEL_VERSION", "gpt-4o-mini")
 
     def __init__(self, quick_extract=False):
         self.quick_extract = quick_extract
