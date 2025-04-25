@@ -1,0 +1,7 @@
+group: mathvision
+task:
+  - mathvision_testmini
+  - mathvision_test
+metadata:
+  version: 0.0
+  quick_extract: false
