@@ -90,21 +90,20 @@ class VLLMR1(lmms):
 
         self.device = self.accelerator.device
         self.batch_size_per_gpu = int(batch_size)
-        self.max_pixels = 1605632
-        self.min_pixels = 256 * 28 * 28
+        self.max_pixels = 16384 * 28 * 28
+        self.min_pixels = 4 * 28 * 28
         config = AutoConfig.from_pretrained(model_version)
         self.model_type = config.model_type
         self.system_prompt = system_prompt
         self.enable_extract_answer = extract_answer
-        
+
     def resize_image(self, image: Image):
-        if self.model_type in ["qwen2_vl","qwen2_5_vl"]:
+        if self.model_type in ["qwen2_vl", "qwen2_5_vl"]:
             from qwen_vl_utils import smart_resize as qwenvl_smart_resize
             width, height = image.size
             resized_height, resized_width = qwenvl_smart_resize(height, width, max_pixels=self.max_pixels, min_pixels=self.min_pixels)
             image = image.resize((resized_width, resized_height))
         return image
-
 
     # Function to encode the image
     def encode_image(self, image: Union[Image.Image, str]):
@@ -235,7 +234,6 @@ class VLLMR1(lmms):
                             base64_data = content["image_url"]["url"].split(",")[-1]
                             content["image_url"]["url"] = f"data:image/png;base64,{base64_data[:30]}..."
                 print(f"Demo message: {demo_msg}")
-            
 
             response = self.client.chat(sampling_params=sampling_params, messages=batched_messages)
             response_text = [o.outputs[0].text for o in response]
