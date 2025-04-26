@@ -19,7 +19,7 @@ with open(Path(__file__).parent / "mathverse.yaml", "r") as f:
 
     config = yaml.safe_load("".join(safe_data))
 
-mathverse_evaluator = MathVerseEvaluator(api_key=os.getenv("OPENAI_API_KEY", "YOUR_API_KEY"), gpt_model=config["metadata"]["gpt_eval_model_name"])
+mathverse_evaluator = MathVerseEvaluator(api_key=os.getenv("OPENAI_API_KEY", "YOUR_API_KEY"), gpt_model=os.getenv("MODEL_VERSION", "gpt-4o-mini"))
 
 
 def mathverse_doc_to_visual(doc):
@@ -57,6 +57,7 @@ def mathverse_process_results(doc, results):
         "metadata": doc["metadata"],
         "query_wo": doc["query_wo"],
         "query_cot": doc["query_cot"],
+        "question_for_eval": doc["question_for_eval"],
     }
 
     return {
