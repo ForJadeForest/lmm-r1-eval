@@ -9,11 +9,9 @@ doc_to_visual: !function utils.mathverse_doc_to_visual
 doc_to_text: !function utils.mathverse_doc_to_text
 doc_to_target: "answer"
 generation_kwargs:
-  until:
-    - "ASSISTANT:"
-  max_new_tokens: 1024
+  max_new_tokens: 4096
   temperature: 0
-  top_p: 0
+  top_p: 1.0
   num_beams: 1
   do_sample: false
 process_results: !function utils.mathverse_process_results
@@ -28,7 +26,7 @@ metric_list:
 lmms_eval_specific_kwargs:
   default:
     shot_type: "format-prompt" # can also be "custom-prompt"
-    query_type: "query_wo" # now only support query_wo
+    query_type: "query_cot" # now only support query_wo
 model_specific_generation_kwargs:
   llava:
     image_aspect_ratio: original
