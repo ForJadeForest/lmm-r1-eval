@@ -5,6 +5,7 @@ import pandas as pd
 import requests
 from loguru import logger as eval_logger
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 DEMO_PROMPT_EXTRACT = """
 I am providing you a response from a model to a math problem, termed 'Model Response'. You should extract the answer from the response as 'Extracted Answer'. Directly output the extracted answer with no explanation.
@@ -40,6 +41,7 @@ DEMO_PROMPT_SCORE = """
 Below are two answers to a math question. Question is [Question], [Standard Answer] is the standard answer to the question, and [Model_answer] is the answer extracted from a model's output to this question.  Determine whether these two answers are consistent.
 Please note that only when the [Model_answer] completely matches the [Standard Answer] means they are consistent. For non-multiple-choice questions, if the meaning is expressed in the same way, it is also considered consistent, for example, 0.5m and 50cm.
 If they are consistent, Judement is 1; if they are different, Judement is 0.
+Please directly output the Judgement with no explanation.
 
 [Question]: Write the set of numbers represented on the number line in interval notation.
 [Standard Answer]: (-2,1]
@@ -93,6 +95,7 @@ class MathVerseEvaluator:
     def __init__(self, api_key, gpt_model="gpt-3.5-turbo", quick_extract=False):
         self.api_key = api_key
         self.gpt_model = gpt_model
+        print(f"gpt_model: {self.gpt_model}")
         self.quick_extract = quick_extract
 
     def _post_request(self, payload):
@@ -190,12 +193,14 @@ class MathVerseEvaluator:
 
         try:
             full_prompt = self.create_match_prompt(DEMO_PROMPT_SCORE, question, answer, extraction)
-            while True:
+            retry = 0
+            while retry < 5:
                 extraction = self.get_chat_response(full_prompt, temperature=0, max_tokens=8, n=1)
-                judgement = extraction.replace("Judgement:", "").strip()
+                judgement = extraction.split("Judgement:")[-1].strip()
                 if judgement.strip() in ["0", "1"]:
                     return int(judgement) == 1
-
+                retry += 1
+                print(f"Retry {retry} for response: {extraction}")
         except Exception as e:
             print(e)
             print(f"Error in matching answer")
@@ -274,38 +279,55 @@ class MathVerseEvaluator:
         query = query.strip()
         return query
 
+
     def eval_results(self, results, config):
-        # extract and score for each question
-        for inst in tqdm(results):
+        # Define a helper function to extract and evaluate a single result
+        def extract_and_evaluate(inst):
             full_prediction = inst["prediction"].strip()
             problem = {
                 "question_type": inst["question_type"],
                 "answer": inst["answer"] if "answer" in inst else None,
-                "question_for_eval": inst["question"],
+                "question_for_eval": inst["question_for_eval"],
+                "prediction": full_prediction
             }
             if config["metadata"].get("trunk_response", -1) > 0:
                 prediction = " ".join(full_prediction.split(" ")[-config["metadata"]["trunk_response"] :])
             else:
                 prediction = full_prediction
             extraction = self.extract_answer(prediction)
+            if post_check_score(problem["answer"], extraction, prefetch=True):
+                res = post_check_score(problem["answer"], extraction, prefetch=True)
+                inst['extraction'] = res
+                inst['prediction'] = res
+                inst['true_false'] = True
+                return inst
             # set test set answer to None
             true_false = self.score_answer(problem["question_for_eval"], problem["answer"], extraction, config["metadata"]["quick_match"]) if problem["answer"] is not None else False
 
             inst["extraction"] = extraction
             inst["prediction"] = prediction
             inst["true_false"] = true_false
+            return inst
 
+        # Use multi-threading to process results in parallel
+        processed_results = []
+        with ThreadPoolExecutor(max_workers=32) as executor:
+            futures = [executor.submit(extract_and_evaluate, inst) for inst in results]
+            
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Evaluating with LLM"):
+                processed_results.append(future.result())
+        
         # calculate total scores
-        sample_index = [result["sample_index"] for result in results]
-        total = len(results)
-        correct = sum(1 for idx, pid in enumerate(sample_index) if results[idx]["true_false"])
+        sample_index = [result["sample_index"] for result in processed_results]
+        total = len(processed_results)
+        correct = sum(1 for idx, pid in enumerate(sample_index) if processed_results[idx]["true_false"])
         accuracy = round(correct / total * 100, 2)
         scores = {"average": {"accuracy": accuracy, "correct": correct, "total": total}}
 
-        for result in results:
+        for result in processed_results:
             result.update(result.pop("metadata"))
 
-        results_dict = {result["sample_index"]: result for result in results}
+        results_dict = {result["sample_index"]: result for result in processed_results}
         df = pd.DataFrame(results_dict).T
         target_keys = ["problem_version", "subfield"]
 
@@ -319,3 +341,13 @@ class MathVerseEvaluator:
             scores[key] = dict(sorted(scores[key].items(), key=lambda item: float(item[1]["accuracy"]), reverse=True))
 
         return results_dict, scores
+
+
+def post_check_score(answer, prediction, prefetch=False):
+    ans = str(answer).strip()
+    response = str(prediction).strip()
+
+    if response == ans:
+        return response if prefetch else True
+    else:
+        return False
