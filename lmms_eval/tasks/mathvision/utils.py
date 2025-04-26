@@ -475,56 +475,16 @@ def mathvision_doc_to_text(doc, lmms_eval_specific_kwargs=None):
 
 def mathvision_process_results(doc, results):
     response = results[0].strip()
-    raw_exampe = doc
-    choices = doc.get("options", [])
-    answer = doc["answer"]
-    precision = None
-    if len(choices) == 0:
-        question_type = "free-form"
-        if answer.isnumeric():
-            answer_type = "integer"
-        else:
-            try:
-                float(answer)
-                answer_type = "float"
-                precision = len(answer.split(".")[1])
-            except:
-                answer_type = "text"
-    else:
-        question_type = "multi_choice"
-        answer_type = "text"
 
-    gt_answer = str(raw_exampe["answer"])
-    if len(raw_exampe["options"]) > 0:
-        gt_answer_value = raw_exampe["options"][ord(gt_answer) - ord("A")]
-    else:
-        gt_answer_value = ""
-
-    extraction = mathvision_evaluator.extract_answer(response, doc, config["metadata"]["quick_extract"])
-    model_answer = mathvision_evaluator.normalize_extracted_answer(extraction, choices, question_type, answer_type, precision) or extraction
-    model_answer = (
-        find_math_answer(model_answer)
-        .replace("(a)", "a")
-        .replace("(b)", "b")
-        .replace("(c)", "c")
-        .replace("(d)", "d")
-        .replace("(e)", "e")
-        .replace("{a}", "a")
-        .replace("{b}", "b")
-        .replace("{c}", "c")
-        .replace("{d}", "d")
-        .replace("{e}", "e")
-        .rstrip(".")
-        .lstrip(":")
-        .strip()
-    )
-
-    correct = is_equal(gt_answer, model_answer) or is_equal(gt_answer_value, model_answer)
     result = {
-        "correct": correct,
-        "subject": raw_exampe["subject"],
-        "level": raw_exampe["level"],
+        "question": doc["question"],
+        "answer": doc["answer"],
+        "options": doc.get("options", []),
+        "prediction": response,
+        "subject": doc["subject"],
+        "level": doc["level"],
     }
+
     return {
         "gpt_eval_score": result,
         "submission": result,
@@ -532,10 +492,75 @@ def mathvision_process_results(doc, results):
 
 
 def mathvision_aggregate_results(results, args, *, calculate_gain=False, random_scores=None):
-    lines = results
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    # First, extract answers and evaluate using multi-threading
+    def extract_and_evaluate(result):
+        doc = result
+        response = doc["prediction"]
+        choices = doc.get("options", [])
+        answer = doc["answer"]
+        precision = None
+
+        if len(choices) == 0:
+            question_type = "free-form"
+            if answer.isnumeric():
+                answer_type = "integer"
+            else:
+                try:
+                    float(answer)
+                    answer_type = "float"
+                    precision = len(answer.split(".")[1])
+                except:
+                    answer_type = "text"
+        else:
+            question_type = "multi_choice"
+            answer_type = "text"
+
+        gt_answer = str(answer)
+        if len(choices) > 0:
+            gt_answer_value = choices[ord(gt_answer) - ord("A")]
+        else:
+            gt_answer_value = ""
+
+        extraction = mathvision_evaluator.extract_answer(response, doc, config["metadata"]["quick_extract"])
+        model_answer = mathvision_evaluator.normalize_extracted_answer(extraction, choices, question_type, answer_type, precision) or extraction
+        model_answer = (
+            find_math_answer(model_answer)
+            .replace("(a)", "a")
+            .replace("(b)", "b")
+            .replace("(c)", "c")
+            .replace("(d)", "d")
+            .replace("(e)", "e")
+            .replace("{a}", "a")
+            .replace("{b}", "b")
+            .replace("{c}", "c")
+            .replace("{d}", "d")
+            .replace("{e}", "e")
+            .rstrip(".")
+            .lstrip(":")
+            .strip()
+        )
+
+        correct = is_equal(gt_answer, model_answer) or is_equal(gt_answer_value, model_answer)
+
+        return {
+            "correct": correct,
+            "subject": doc["subject"],
+            "level": doc["level"],
+        }
+
+    # Process all results with multi-threading
+    processed_results = []
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        futures = [executor.submit(extract_and_evaluate, result) for result in results]
+
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Evaluating with LLM"):
+            processed_results.append(future.result())
+
+    # Calculate aggregated results
     results_dict = {}
-    for line in tqdm(lines, desc="math_level_subject_acc"):
+    for line in tqdm(processed_results, desc="math_level_subject_acc"):
         correct = line["correct"]
         subject = line["subject"]
         level = line["level"]
