@@ -298,14 +298,12 @@ class MathVerseEvaluator:
             if post_check_score(problem["answer"], extraction, prefetch=True):
                 res = post_check_score(problem["answer"], extraction, prefetch=True)
                 inst['extraction'] = res
-                inst['prediction'] = res
                 inst['true_false'] = True
                 return inst
             # set test set answer to None
             true_false = self.score_answer(problem["question_for_eval"], problem["answer"], extraction, config["metadata"]["quick_match"]) if problem["answer"] is not None else False
 
             inst["extraction"] = extraction
-            inst["prediction"] = prediction
             inst["true_false"] = true_false
             return inst
 

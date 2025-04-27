@@ -12,14 +12,8 @@ doc_to_target: "answer"
 generation_kwargs:
   max_new_tokens: 4096
   temperature: 0.0
-  do_sample: false
-  top_p: 1.0
-  top_k: -1
   repetition_penalty: 1.0
-  until:
-    - "</s>"
-    - "Q:"
-    - "<|im_end|>"
+
 process_results: !function utils.mathverse_process_results
 metric_list:
   - metric: gpt_eval_score
@@ -32,7 +26,7 @@ metric_list:
 lmms_eval_specific_kwargs:
   default:
     shot_type: "format-prompt" # can also be "custom-prompt"
-    query_type: "question"
+    query_type: "query_cot"
 model_specific_generation_kwargs:
   llava:
     image_aspect_ratio: original
