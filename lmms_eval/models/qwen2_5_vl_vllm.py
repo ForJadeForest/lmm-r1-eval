@@ -1,5 +1,5 @@
+import os
 import re
-
 from copy import deepcopy
 from io import BytesIO
 from multiprocessing import cpu_count
@@ -16,7 +16,6 @@ from transformers import AutoConfig, AutoProcessor
 from lmms_eval.api.instance import Instance
 from lmms_eval.api.model import lmms
 from lmms_eval.api.registry import register_model
-
 
 try:
     from vllm import LLM, SamplingParams
@@ -100,6 +99,12 @@ class Qwen2_5_VL_VLLM(lmms):
         self.min_pixels = min_pixels
         self.system_prompt = system_prompt
         self.enable_extract_answer = extract_answer
+        # if system_prompt is a path, read the file
+        if os.path.exists(system_prompt):
+            with open(system_prompt, "r") as f:
+                self.system_prompt = f.read()
+        else:
+            self.system_prompt = system_prompt
 
         # Initialize processor for chat template application
         self.processor = AutoProcessor.from_pretrained(model_version)
