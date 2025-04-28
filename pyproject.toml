@@ -46,7 +46,7 @@ dependencies = [
     "av",
     "hf_transfer",
     "nltk",
-    "sentencepiece==0.1.99",
+    "sentencepiece==0.2.0",
     "yt-dlp",
     "pycocoevalcap",
     "tqdm-multiprocess",
@@ -74,6 +74,7 @@ dependencies = [
     "protobuf==3.20",
     "sentence_transformers",
     "python-dotenv",
+    "vllm==0.8.2",
 ]
 
 [project.optional-dependencies]

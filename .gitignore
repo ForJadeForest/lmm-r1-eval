@@ -1,6 +1,7 @@
 **/.cache
 env
 *.pyc
+results
 output/
 data/
 lm_cache
