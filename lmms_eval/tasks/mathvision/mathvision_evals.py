@@ -1,9 +1,9 @@
 import os
 import re
 import time
-from latex2sympy2 import latex2sympy
+
 import requests
-from Levenshtein import distance
+from latex2sympy2 import latex2sympy
 from loguru import logger as eval_logger
 
 # pids: 799, 681, 615
@@ -289,14 +289,6 @@ class MathVisionEvaluator:
             eval_logger.error(f"Error in extracting answer for problem")
 
         return ""
-
-    def get_most_similar(self, prediction, choices):
-        """
-        Use the Levenshtein distance (or edit distance) to determine which of the choices is most similar to the given prediction
-        """
-        distances = [distance(prediction, choice) for choice in choices]
-        ind = distances.index(min(distances))
-        return choices[ind]
 
     def normalize_extracted_answer(self, extraction, choices, question_type, answer_type, precision):
         """
