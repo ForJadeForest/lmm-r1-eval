@@ -44,9 +44,8 @@ elif API_TYPE == "azure":
 mathvision_evaluator = MathVisionEvaluator(api_key=API_KEY, gpt_model=gpt_model)
 
 
-def timestamp() -> str:
+def get_timestamp() -> str:
     nowtime = time.strftime("-%Y%m%d-%H%M", time.localtime(time.time()))
-    print(nowtime)
     return nowtime
 
 
@@ -60,7 +59,7 @@ def is_number(s):
 
 def save_jsonl(path: str, data: list, t_stamp=True) -> None:
     if t_stamp:
-        file_name = f"{path.replace('.jsonl','')}{timestamp()}.jsonl"
+        file_name = f"{path.replace('.jsonl','')}{get_timestamp()}.jsonl"
     else:
         file_name = path
     with open(file_name, "w", encoding="utf-8") as f:
@@ -548,6 +547,7 @@ def mathvision_aggregate_results(results, args, *, calculate_gain=False, random_
             "correct": correct,
             "subject": doc["subject"],
             "level": doc["level"],
+            "prediction": response,
         }
 
     # Process all results with multi-threading
@@ -559,6 +559,7 @@ def mathvision_aggregate_results(results, args, *, calculate_gain=False, random_
             processed_results.append(future.result())
 
     # Calculate aggregated results
+    total = len(processed_results)
     results_dict = {}
     for line in tqdm(processed_results, desc="math_level_subject_acc"):
         correct = line["correct"]
@@ -577,7 +578,17 @@ def mathvision_aggregate_results(results, args, *, calculate_gain=False, random_
             results_dict[key] = f"{results_dict[key][0]}/{results_dict[key][1]}={round(results_dict[key][0]/ max(results_dict[key][1], 1)*100, 2)}%"
 
     results_dict = {key: results_dict[key] for key in sorted(results_dict.keys())}
-    file = generate_submission_file(f"mathvista_results.json", args)
+
+    # get the avg word length of the correct predictions/incorrect predictions and the total predictions
+    correct_avg_word_length = sum(len(result["prediction"].split()) for result in processed_results if result["correct"]) / correct if correct > 0 else 0
+    incorrect_avg_word_length = sum(len(result["prediction"].split()) for result in processed_results if not result["correct"]) / (total - correct) if total - correct > 0 else 0
+    total_avg_word_length = sum(len(result["prediction"].split()) for result in processed_results) / total if total > 0 else 0
+    results_dict["correct_avg_word_length"] = correct_avg_word_length
+    results_dict["incorrect_avg_word_length"] = incorrect_avg_word_length
+    results_dict["total_avg_word_length"] = total_avg_word_length
+    
+    # Add timestamp to the file name
+    file = generate_submission_file(f"{get_timestamp()}_mathvision_results.json", args)
     with open(file, "w") as f:
         json.dump(results_dict, f, indent=4)
     score = re.findall(r"(\d+\.\d+)%", results_dict["-all"])[0]

@@ -285,27 +285,30 @@ class MathVerseEvaluator:
         def extract_and_evaluate(inst):
             full_prediction = inst["prediction"].strip()
             problem = {
-                "question_type": inst["question_type"],
                 "answer": inst["answer"] if "answer" in inst else None,
                 "question_for_eval": inst["question_for_eval"],
-                "prediction": full_prediction
             }
             if config["metadata"].get("trunk_response", -1) > 0:
                 prediction = " ".join(full_prediction.split(" ")[-config["metadata"]["trunk_response"] :])
             else:
                 prediction = full_prediction
             extraction = self.extract_answer(prediction)
+            result_dict = {
+                'metadata': inst['metadata'],
+                'sample_index': inst['sample_index'],
+                'problem_index': inst['problem_index'],
+                'problem_version': inst['problem_version'],
+                'prediction': prediction,
+                'extraction': extraction,
+            }
             if post_check_score(problem["answer"], extraction, prefetch=True):
-                res = post_check_score(problem["answer"], extraction, prefetch=True)
-                inst['extraction'] = res
-                inst['true_false'] = True
-                return inst
+                result_dict['true_false'] = True
+                return result_dict
             # set test set answer to None
             true_false = self.score_answer(problem["question_for_eval"], problem["answer"], extraction, config["metadata"]["quick_match"]) if problem["answer"] is not None else False
 
-            inst["extraction"] = extraction
-            inst["true_false"] = true_false
-            return inst
+            result_dict["true_false"] = true_false
+            return result_dict
 
         # Use multi-threading to process results in parallel
         processed_results = []
@@ -316,18 +319,26 @@ class MathVerseEvaluator:
                 processed_results.append(future.result())
         
         # calculate total scores
+        print(processed_results[0])
         sample_index = [result["sample_index"] for result in processed_results]
         total = len(processed_results)
         correct = sum(1 for idx, pid in enumerate(sample_index) if processed_results[idx]["true_false"])
         accuracy = round(correct / total * 100, 2)
         scores = {"average": {"accuracy": accuracy, "correct": correct, "total": total}}
+        # get the avg word length of the correct predictions/incorrect predictions and the total predictions
+        correct_avg_word_length = sum(len(result["prediction"].split()) for result in processed_results if result["true_false"]) / correct if correct > 0 else 0
+        incorrect_avg_word_length = sum(len(result["prediction"].split()) for result in processed_results if not result["true_false"]) / (total - correct) if total - correct > 0 else 0
+        total_avg_word_length = sum(len(result["prediction"].split()) for result in processed_results) / total if total > 0 else 0
+        scores["average"]["correct_avg_word_length"] = correct_avg_word_length
+        scores["average"]["incorrect_avg_word_length"] = incorrect_avg_word_length
+        scores["average"]["total_avg_word_length"] = total_avg_word_length
 
         for result in processed_results:
             result.update(result.pop("metadata"))
 
         results_dict = {result["sample_index"]: result for result in processed_results}
         df = pd.DataFrame(results_dict).T
-        target_keys = ["problem_version", "subfield"]
+        target_keys = ["problem_version", "subfield", "source", "subject"]
 
         for key in target_keys:
             values = df[key].unique()
