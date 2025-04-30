@@ -5,6 +5,9 @@
 export MODEL_CKPT="VLM-Reasoner/Qwen2.5-VL-3B-Instruct-se-v1-80step"
 export GPU_ID="0"  # GPU ID to use
 export HF_TOKEN="xxxx"
+
+# Install lighteval
+pip install git+https://github.com/huggingface/lighteval.git
 # Evaluation tasks
 
 TASKS="custom|math_500|0|0,custom|gpqa:diamond|0|0,custom|aime24|0|0,custom|aime25|0|0"
@@ -57,7 +60,7 @@ run_evaluation() {
     echo "MODEL_ARGS: $MODEL_ARGS"
     # Run evaluation
     CUDA_VISIBLE_DEVICES=$GPU_ID lighteval vllm $MODEL_ARGS "$TASKS" \
-        --custom-tasks eval_text.py \
+        --custom-tasks text_eval.py \
         --use-chat-template \
         --output-dir $output_path \
         --push-to-hub \
