@@ -45,7 +45,7 @@ mathvision_evaluator = MathVisionEvaluator(api_key=API_KEY, gpt_model=gpt_model)
 
 
 def get_timestamp() -> str:
-    nowtime = time.strftime("-%Y%m%d-%H%M", time.localtime(time.time()))
+    nowtime = time.strftime("%Y%m%d-%H%M", time.localtime(time.time()))
     return nowtime
 
 

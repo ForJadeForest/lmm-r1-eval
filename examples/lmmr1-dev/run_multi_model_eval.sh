@@ -407,7 +407,7 @@ run_parallel_evaluation_manager() {
     local failed_tasks=0
 
     # Loop while there are tasks to run or tasks still running
-    while [ $task_idx -lt $TOTAL_EVAL_TASKS ] || [[ " ${gpu_pids[@]} " =~ " -1 " ]] == false; do
+    while [ $task_idx -lt $TOTAL_EVAL_TASKS ] || ! [[ " ${gpu_pids[@]} " =~ " -1 " ]]; do
 
         # Check for completed processes
         for ((gpu_idx=0; gpu_idx<$NUM_GPUS; gpu_idx++)); do
@@ -472,7 +472,7 @@ run_parallel_evaluation_manager() {
                     task_idx=$((task_idx + 1)) # Move to next task
 
                     # Break the inner loop if all tasks assigned or no more free GPUs in this iteration
-                    if [ $task_idx -ge $TOTAL_EVAL_TASKS ] || [[ " ${gpu_pids[@]} " =~ " -1 " ]] == false; then
+                    if [ $task_idx -ge $TOTAL_EVAL_TASKS ] || ! [[ " ${gpu_pids[@]} " =~ " -1 " ]]; then
                          break
                     fi
                 fi
@@ -480,13 +480,13 @@ run_parallel_evaluation_manager() {
         fi
 
          # If all GPUs are busy and tasks remain, wait before checking again
-         if [ $task_idx -lt $TOTAL_EVAL_TASKS ] && [[ " ${gpu_pids[@]} " =~ " -1 " ]] == false; then
+         if [ $task_idx -lt $TOTAL_EVAL_TASKS ] && ! [[ " ${gpu_pids[@]} " =~ " -1 " ]]; then
               echo -e "${YELLOW}[Manager] All GPUs busy. Waiting... ($completed_tasks completed, $failed_tasks failed)${NC}"
               sleep 30 # Wait for 30 seconds before checking process statuses again
-         elif [ $task_idx -ge $TOTAL_EVAL_TASKS ] && [[ " ${gpu_pids[@]} " =~ " -1 " ]] == false; then
+         elif [ $task_idx -ge $TOTAL_EVAL_TASKS ] && ! [[ " ${gpu_pids[@]} " =~ " -1 " ]]; then
               echo -e "${YELLOW}[Manager] All tasks assigned. Waiting for ${#pid_to_gpu_idx[@]} remaining processes... ($completed_tasks completed, $failed_tasks failed)${NC}"
                sleep 30 # Wait for running processes
-          elif [ $task_idx -lt $TOTAL_EVAL_TASKS ] && [[ " ${gpu_pids[@]} " =~ " -1 " ]] == true; then
+          elif [ $task_idx -lt $TOTAL_EVAL_TASKS ] && [[ " ${gpu_pids[@]} " =~ " -1 " ]]; then
               # This case (tasks left but GPUs free) should be handled by launching loop above
                sleep 1 # Short sleep before re-checking GPU availability
           else
