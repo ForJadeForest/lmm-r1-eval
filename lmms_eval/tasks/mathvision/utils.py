@@ -1,14 +1,14 @@
-import os
 import json
-from latex2sympy2 import latex2sympy
+import os
 import re
 import time  # 引入time模块
 from math import *
 from pathlib import Path
+
 import yaml
-import json
+from latex2sympy2 import latex2sympy
 from tqdm import tqdm  # Assuming tqdm is imported to show progress bar
-import time
+
 from lmms_eval.tasks._task_utils.file_utils import generate_submission_file
 from lmms_eval.tasks.mathvision.mathvision_evals import MathVisionEvaluator
 
@@ -43,10 +43,7 @@ elif API_TYPE == "azure":
 
 mathvision_evaluator = MathVisionEvaluator(api_key=API_KEY, gpt_model=gpt_model)
 
-
-def get_timestamp() -> str:
-    nowtime = time.strftime("-%Y%m%d-%H%M", time.localtime(time.time()))
-    return nowtime
+CURRENT_TIME = time.strftime("%Y%m%d-%H%M", time.localtime(time.time()))
 
 
 def is_number(s):
@@ -59,7 +56,7 @@ def is_number(s):
 
 def save_jsonl(path: str, data: list, t_stamp=True) -> None:
     if t_stamp:
-        file_name = f"{path.replace('.jsonl','')}{get_timestamp()}.jsonl"
+        file_name = f"{path.replace('.jsonl','')}{CURRENT_TIME}.jsonl"
     else:
         file_name = path
     with open(file_name, "w", encoding="utf-8") as f:
@@ -586,9 +583,10 @@ def mathvision_aggregate_results(results, args, *, calculate_gain=False, random_
     results_dict["correct_avg_word_length"] = correct_avg_word_length
     results_dict["incorrect_avg_word_length"] = incorrect_avg_word_length
     results_dict["total_avg_word_length"] = total_avg_word_length
-    
+
     # Add timestamp to the file name
-    file = generate_submission_file(f"{get_timestamp()}_mathvision_results.json", args)
+
+    file = generate_submission_file(f"{CURRENT_TIME}_mathvision_results.json", args)
     with open(file, "w") as f:
         json.dump(results_dict, f, indent=4)
     score = re.findall(r"(\d+\.\d+)%", results_dict["-all"])[0]
