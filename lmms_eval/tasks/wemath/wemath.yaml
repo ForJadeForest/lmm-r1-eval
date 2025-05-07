@@ -1,0 +1,3 @@
+group: wemath
+task:
+  - wemath_testmini

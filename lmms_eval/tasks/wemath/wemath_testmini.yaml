@@ -1,0 +1,25 @@
+dataset_path: We-Math/We-Math
+
+dataset_kwargs:
+  token: False
+task: "wemath_testmini"
+test_split: testmini
+tag: visual_reasoning_collection
+output_type: generate_until
+doc_to_visual: !function utils.wemath_doc_to_visual
+doc_to_text: !function utils.wemath_doc_to_text
+doc_to_target: "answer"
+generation_kwargs:
+  max_new_tokens: 4096
+  temperature: 0.0
+  repetition_penalty: 1.0
+
+process_results: !function utils.wemath_process_results
+metric_list:
+  - metric: gpt_eval_score
+    aggregation: !function utils.wemath_aggregate_results_eval
+    higher_is_better: true
+
+lmms_eval_specific_kwargs:
+  default:
+    use_requirements: False
