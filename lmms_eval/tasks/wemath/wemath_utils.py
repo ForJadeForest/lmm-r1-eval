@@ -110,7 +110,6 @@ def evaluate_update_main_results_df(main_results_df, total_counts, rates):
 def wemath_evaluate_models(data):
     main_results_df = pd.DataFrame(
         columns=[
-            "Model",
             "Score (Strict)",
             "InsufficientKnowledge (Strict)",
             "InadequateGeneralization (Strict)",
@@ -177,7 +176,6 @@ def accuracy_update_main_results_df(nodes, main_results_df, concatenated_data, m
     Three_step_acc = "{:.2%}".format(merged_3steps["joker_multi"].mean())
 
     new_row = {
-        # 'Model': model_name,
         "One-step(S1)": One_step_acc,
         "Two-step(S2)": Two_step_acc,
         "Three-step(S3)": Three_step_acc,
@@ -221,8 +219,6 @@ def wemath_accuracy(data):
         ]
     )
 
-    # print(f"Evaluating model: {model_name}, JSON path: {output_json}")
-    # data = load_and_process_data(output_json)
     data_2steps = data[data["key"].str.contains("2steps")]
     data_3steps = data[data["key"].str.contains("3steps")]
     merged_2steps = accuracy_process_steps_data(data_2steps, 2)
