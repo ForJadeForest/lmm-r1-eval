@@ -1,11 +1,11 @@
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import requests
 from loguru import logger as eval_logger
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 DEMO_PROMPT_EXTRACT = """
 I am providing you a response from a model to a math problem, termed 'Model Response'. You should extract the answer from the response as 'Extracted Answer'. Directly output the extracted answer with no explanation.
@@ -103,7 +103,7 @@ class MathVerseEvaluator:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        response = requests.post(self.API_URL, headers=headers, json=payload, timeout=30)
+        response = requests.post(self.API_URL, headers=headers, json=payload, timeout=60)
         response.raise_for_status()
         return response.json()
 
@@ -279,7 +279,6 @@ class MathVerseEvaluator:
         query = query.strip()
         return query
 
-
     def eval_results(self, results, config):
         # Define a helper function to extract and evaluate a single result
         def extract_and_evaluate(inst):
@@ -294,15 +293,15 @@ class MathVerseEvaluator:
                 prediction = full_prediction
             extraction = self.extract_answer(prediction)
             result_dict = {
-                'metadata': inst['metadata'],
-                'sample_index': inst['sample_index'],
-                'problem_index': inst['problem_index'],
-                'problem_version': inst['problem_version'],
-                'prediction': prediction,
-                'extraction': extraction,
+                "metadata": inst["metadata"],
+                "sample_index": inst["sample_index"],
+                "problem_index": inst["problem_index"],
+                "problem_version": inst["problem_version"],
+                "prediction": prediction,
+                "extraction": extraction,
             }
             if post_check_score(problem["answer"], extraction, prefetch=True):
-                result_dict['true_false'] = True
+                result_dict["true_false"] = True
                 return result_dict
             # set test set answer to None
             true_false = self.score_answer(problem["question_for_eval"], problem["answer"], extraction, config["metadata"]["quick_match"]) if problem["answer"] is not None else False
@@ -314,10 +313,10 @@ class MathVerseEvaluator:
         processed_results = []
         with ThreadPoolExecutor(max_workers=32) as executor:
             futures = [executor.submit(extract_and_evaluate, inst) for inst in results]
-            
+
             for future in tqdm(as_completed(futures), total=len(futures), desc="Evaluating with LLM"):
                 processed_results.append(future.result())
-        
+
         # calculate total scores
         print(processed_results[0])
         sample_index = [result["sample_index"] for result in processed_results]
