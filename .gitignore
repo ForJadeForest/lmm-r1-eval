@@ -1,4 +1,5 @@
 **/.cache
+*cursor*
 env
 *.pyc
 results
