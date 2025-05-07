@@ -24,8 +24,7 @@ mathverse_evaluator = MathVerseEvaluator(api_key=os.getenv("OPENAI_API_KEY", "YO
 
 
 def get_timestamp() -> str:
-    nowtime = time.strftime("-%Y%m%d-%H%M", time.localtime(time.time()))
-    print(nowtime)
+    nowtime = time.strftime("%Y%m%d-%H%M", time.localtime(time.time()))
     return nowtime
 
 
