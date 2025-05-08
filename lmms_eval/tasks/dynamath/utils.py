@@ -48,7 +48,7 @@ Example of expected JSON response format:
     query_prompt = f"## Question\n {doc['question']}"
     if doc['answer_type'] == 'multiple choice':
         inst = "Provide the corresponing choice option in the 'short answer' key, such as 'A', 'B', 'C', or 'D'."
-    elif line['answer_type'] == 'float':
+    elif doc['answer_type'] == 'float':
         inst = "Format the answer as a three-digit floating-point number and provide it in the 'short answer' key."
     else:
         inst = "Float numbers in the answer should be formatted as three-digit floating-point numbers."
@@ -67,17 +67,19 @@ def dynamath_process_results(doc, results):
             "extraction_prediction": result["extraction_prediction"],
             "true_false": result["true_false"],
             "subject": doc["subject"],
-            "question_type": doc["question_type"],
             "knowledge_level": doc["knowledge_level"],
             "answer_type": doc["answer_type"],
             "answer": doc["ground_truth"] if "ground_truth" in doc else None,
             "question": doc["question"],
-            "ID": doc["ID"],
+            "id": doc["id"],
+            "varid": doc["varid"],
+            "qid": doc["qid"],
+            "index": doc["index"],
         }
     }
 
 # aggregate里面计算总的指标
-def dymamath_aggregate_results_eval(results, args):
+def dynamath_aggregate_results_eval(results, args):
     timestamp = get_timestamp()
     path = generate_submission_file(f"dynamath_{timestamp}_results.json", args)
     with open(path, "w") as f:
@@ -92,7 +94,7 @@ def dymamath_aggregate_results_eval(results, args):
         json.dump(scores, f, indent=4)
 
     eval_logger.info(f"Saved scores to {path}")
-    if scores["overall_accuracy"] == 0:
+    if scores['overall_accuracy'] == 0:
         return None 
-    return scores["overall_accuracy"]
+    return scores['overall_accuracy']
 

@@ -84,7 +84,7 @@ class DynaMathEvaluator:
         response.raise_for_status()
         return response.json()
 
-    def get_chat_response(self, prompt, temperature=0, max_tokens=256, n=1, patience=10000000, sleep_time=0):
+    def get_chat_response(self, prompt, temperature=0, max_tokens=256, n=1, patience=10, sleep_time=0):
         messages = [
             {"role": "user", "content": prompt},
         ]
@@ -141,7 +141,7 @@ class DynaMathEvaluator:
             dj = json.loads(pred, strict=False)
             short_answer = dj.get("short answer")
             assert short_answer is not None
-            succeed, short_answer = parse_answer(short_answer, answer_type=line['answer_type'])
+            succeed, short_answer = parse_answer(short_answer, answer_type=doc['answer_type'])
             assert succeed
         except:
             # Failed to parse the JSON, use an auxiliary LLM to get the short answer
@@ -155,74 +155,87 @@ class DynaMathEvaluator:
                     "should be formatted as three-digit floating-point numbers."
                 )
 
-        prompt = f"Free-form answer: {pred}\nInstruction: {inst}"
-        response = pred
-        succeed, short_answer = parse_answer(response, doc['answer_type'])
-
-        if not succeed:
-            response = self.get_chat_response(prompt)
+            prompt = f"Free-form answer: {pred}\nInstruction: {inst}"
+            response = pred
             succeed, short_answer = parse_answer(response, doc['answer_type'])
+
+            if not succeed:
+                print("using api to get the answer...")
+                response = self.get_chat_response(prompt)
+                succeed, short_answer = parse_answer(response, doc['answer_type'])
         
         if doc['answer_type'] == 'float':
             if succeed:
-                diff = float(short_answer) - float(doc['answer'])
+                diff = float(short_answer) - float(doc['ground_truth'])
                 result["extraction_prediction"] = short_answer
                 if abs(diff) <= 0.001:
                     result["true_false"] = True
                 else:
                     result["true_false"] = False
                 return result
+            else:
+                result["extraction_prediction"] = None
+                result["true_false"] = False
+                return result
         elif doc['answer_type'] == 'multiple choice':
             if succeed:
                 result["extraction_prediction"] = short_answer
-                result["true_false"] = (short_answer == doc['answer'])
+                result["true_false"] = (short_answer == doc['ground_truth'])
                 return result
-
-        return result
-
+            else:
+                if doc['ground_truth'] in pred[:3].upper():
+                    result["extraction_prediction"] = None
+                    result["true_false"] = True
+                else:
+                    result["extraction_prediction"] = None
+                    result["true_false"] = False
+                return result
+        else:
+            if succeed:
+                result["extraction_prediction"] = short_answer
+                result["true_false"] = (short_answer.lower() in doc['ground_truth'].lower())
+                return result
+            else:
+                result["extraction_prediction"] = None
+                result["true_false"] = (short_answer.lower() in doc['ground_truth'].lower())
+                return result
+    
     def eval_results(self, results):
         results_df = pd.DataFrame(results)
         score_avg = {}
         # 1. 计算overall_accuracy
         score_avg["overall_accuracy"] = results_df["true_false"].mean()
         # 2. 分科目统计，统计各个科目的 overaccuracy
-        # 2. 我想 计算每一个具体的科目的平均准确率
         subs = set(results_df['subject'])
         for sub in subs:
             sub_df = results_df[results_df['subject'] == sub]
             score_avg[f'Subject-{sub}'] = sub_df["true_false"].mean()
 
         # 3. 分知识水平统计，统计各个知识水平的 overaccuracy
-        # 3. 我想 计算每一个具体的知识水平的平均准确率
         lvls = set(results_df['knowledge_level'])
         for lvl in lvls:
             knowledge_level_df = results_df[results_df['knowledge_level'] == lvl]
             score_avg[f'Level-{lvl}'] = knowledge_level_df["true_false"].mean()
 
-        # Calculate the Worst Case Accuracy 
-        # 一个问题有10个变体，由于我已经处理好了数据集，也就是id=1和id=502，id=（501*2）+1，id=（501*3）+1，依次类推，是同一种问题
-        # 1. 计算每个变体是否正确
-        # 2. 正确率 = 正确数/ 总问题数（501）
-        # 获取所有问题的ID
-        all_ids = results_df['id'].astype(int).tolist()
-        # 对每个问题（1-501）计算其所有变体是否都正确
-        correct_problems = 0
-        for problem_id in range(1, 502):  # 遍历501个问题
-            # 获取当前问题的所有变体ID
-            variant_ids = [problem_id + i*501 for i in range(10)]  # 每个问题的10个变体
-            # 获取这些变体的结果
-            variants_results = results_df[results_df['id'].astype(int).isin(variant_ids)]['true_false'].tolist()
-            # 如果所有变体都正确，则这个问题算正确
-            if all(variants_results):
-                correct_problems += 1
-
-        # 计算Worst Case Accuracy
-        score_worst = correct_problems / 501
-
-        # 将Worst Case Accuracy添加到总分数中
-        score_avg["Worst_Case"] = score_worst
+        # 创建一个字典，表示平均情况
+        score = {'Setting': 'Average'}  # 添加一个标识列
+        score.update(score_avg)         # 将平均分数添加到字典中
 
         # results_df to json
         results = results_df.to_dict(orient="records")
+        print(score)
+        return results, score
 
-        return results, score_avg
+'''print(score):
+    {'Setting': 'Average', 
+    'overall_accuracy': 0.59375,
+    'Subject-plane geometry': 0.7272727272727273,
+    'Subject-algebra': 1.0,
+    'Subject-statistics': 0.42857142857142855,
+    'Subject-arithmetic': 0.8333333333333334,
+    'Subject-analytic geometry': 0.3333333333333333,
+    'Subject-solid geometry': 0.0,
+    'Level-high school': 0.5294117647058824,
+    'Level-elementary school': 0.6666666666666666
+    }
+'''
