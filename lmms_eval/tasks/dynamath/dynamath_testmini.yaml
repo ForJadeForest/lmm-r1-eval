@@ -1,4 +1,4 @@
-dataset_path: /home/share/chy/DynaMath_Eval/
+dataset_path: VLM-Reasoner/DynaMath_Eval
 
 dataset_kwargs:
   token: False
