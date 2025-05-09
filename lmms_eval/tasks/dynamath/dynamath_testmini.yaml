@@ -22,4 +22,4 @@ metric_list:
 
 lmms_eval_specific_kwargs:
   default:
-    use_requirements: False
+    use_guide_prompt: True
