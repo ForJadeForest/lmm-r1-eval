@@ -180,8 +180,8 @@ class Qwen2_5_VL_VLLM(lmms):
                 inputs.append(
                     {
                         "prompt": prompt,
-                        "multi_modal_data": mm_data,
-                        "mm_processor_kwargs": mm_processor_kwargs,
+                        "multi_modal_data": mm_data if len(mm_data) > 0 else None,
+                        "mm_processor_kwargs": mm_processor_kwargs if len(mm_data) > 0 else None,
                     }
                 )
 
