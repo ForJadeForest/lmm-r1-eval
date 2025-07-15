@@ -458,14 +458,20 @@ def mathvision_doc_to_visual(doc):
 
 
 def mathvision_doc_to_text(doc, lmms_eval_specific_kwargs=None):
-    query_prompt = mathvision_evaluator.create_one_query(
-        doc,
-        shot_num=lmms_eval_specific_kwargs["shot"],
-        shot_type=lmms_eval_specific_kwargs["shot_type"],
-        use_caption=lmms_eval_specific_kwargs["use_caption"],
-        use_ocr=lmms_eval_specific_kwargs["use_ocr"],
-    )
-    query_prompt = re.sub(r"<image\d+>", r"<image>", query_prompt)
+    question, choices = doc["question"], doc["options"]
+    len_choices = len(choices)
+    options = [chr(ord("A") + i) for i in range(len_choices)]
+    choices_str = "\n".join([f"{option}. {choice}" for option, choice in zip(options, choices)])
+
+    mc_prompt = ""
+    if lmms_eval_specific_kwargs is not None:
+        mc_prompt = "\n" + lmms_eval_specific_kwargs["mc_prompt"]
+
+    query_prompt = 'Please solve the problem step by step and put your answer in one "\\boxed{}".'
+    if choices_str:
+        query_prompt += f"{question}\nChoices: {choices_str}" + mc_prompt
+    else:
+        query_prompt += question
     return query_prompt
 
 

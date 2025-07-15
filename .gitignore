@@ -46,5 +46,7 @@ lmms_eval/tasks/mlvu/__pycache__/utils.cpython-310.pyc
 
 scripts/
 .env
+.venv
 outputs/
 span.log
+uv.lock

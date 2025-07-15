@@ -1,5 +1,5 @@
-<p align="center" width="80%">
-<img src="https://i.postimg.cc/KvkLzbF9/WX20241212-014400-2x.png"  width="100%" height="70%">
+<p align="center" width="70%">
+<img src="https://i.postimg.cc/KvkLzbF9/WX20241212-014400-2x.png">
 </p>
 
 # The Evaluation Suite of Large Multimodal Models 
@@ -10,15 +10,17 @@
 [![issue resolution](https://img.shields.io/github/issues-closed-raw/EvolvingLMMs-Lab/lmms-eval)](https://github.com/EvolvingLMMs-Lab/lmms-eval/issues)
 [![open issues](https://img.shields.io/github/issues-raw/EvolvingLMMs-Lab/lmms-eval)](https://github.com/EvolvingLMMs-Lab/lmms-eval/issues)
 
-> Accelerating the development of large multimodal models (LMMs) with `lmms-eval`
+> Accelerating the development of large multimodal models (LMMs) with `lmms-eval`. We support most text, image, video and audio tasks.
 
-🏠 [LMMs-Lab Homepage](https://lmms-lab.framer.ai) | 🤗 [Huggingface Datasets](https://huggingface.co/lmms-lab) | <a href="https://emoji.gg/emoji/1684-discord-thread"><img src="https://cdn3.emoji.gg/emojis/1684-discord-thread.png" width="14px" height="14px" alt="Discord_Thread"></a> [discord/lmms-eval](https://discord.gg/zdkwKUqrPy)
+🏠 [LMMs-Lab Homepage](https://www.lmms-lab.com/) | 🤗 [Huggingface Datasets](https://huggingface.co/lmms-lab) | <a href="https://emoji.gg/emoji/1684-discord-thread"><img src="https://cdn3.emoji.gg/emojis/1684-discord-thread.png" width="14px" height="14px" alt="Discord_Thread"></a> [discord/lmms-eval](https://discord.gg/zdkwKUqrPy)
 
 📖 [Supported Tasks (90+)](https://github.com/EvolvingLMMs-Lab/lmms-eval/blob/main/docs/current_tasks.md) | 🌟 [Supported Models (30+)](https://github.com/EvolvingLMMs-Lab/lmms-eval/tree/main/lmms_eval/models) | 📚 [Documentation](docs/README.md)
 
 ---
 
 ## Annoucement
+
+- [2025-04] 🚀🚀 Introducing [Aero-1-Audio](https://www.lmms-lab.com/posts/aero_audio/) — a compact yet mighty audio model. We have officially supports evaluation for Aero-1-Audio and it supports batched evaluations! Feel free to try out.
 
 - [2025-02] 🚀🚀 We have integrated [`vllm`](https://github.com/EvolvingLMMs-Lab/lmms-eval/pull/544) into our models, enabling accelerated evaluation for both multimodal and language models. Additionally, we have incorporated [`openai_compatible`](https://github.com/EvolvingLMMs-Lab/lmms-eval/pull/546) to support the evaluation of any API-based model that follows the OpenAI API format. Check the usages [here](https://github.com/EvolvingLMMs-Lab/lmms-eval/tree/main/miscs/model_dryruns).
 
@@ -31,6 +33,7 @@
 <details>
 <summary>We warmly welcome contributions from the open-source community! Below is a chronological list of recent tasks, models, and features added by our amazing contributors. </summary>
 
+- [2025-06] 🎉🎉 We welcome the new task [VideoMathQA](https://mbzuai-oryx.github.io/VideoMathQA), designed to evaluate mathematical reasoning in real-world educational videos.
 - [2024-10] 🎉🎉 We welcome the new task [NaturalBench](https://huggingface.co/datasets/BaiqiL/NaturalBench), a vision-centric VQA benchmark (NeurIPS'24) that challenges vision-language models with simple questions about natural imagery.
 - [2024-10] 🎉🎉 We welcome the new task [TemporalBench](https://huggingface.co/datasets/microsoft/TemporalBench) for fine-grained temporal understanding and reasoning for videos, which reveals a huge (>30%) human-AI gap.
 - [2024-10] 🎉🎉 We welcome the new tasks [VDC](https://rese1f.github.io/aurora-web/) for video detailed captioning, [MovieChat-1K](https://rese1f.github.io/MovieChat/) for long-form video understanding, and [Vinoground](https://vinoground.github.io/), a temporal counterfactual LMM benchmark composed of 1000 short natural video-caption pairs. We also welcome the new models: [AuroraCap](https://github.com/rese1f/aurora) and [MovieChat](https://github.com/rese1f/MovieChat).

@@ -61,6 +61,8 @@ def mathverse_process_results(doc, results):
         "prediction": prediction,
         "question_type": doc["question_type"],
         "metadata": doc["metadata"],
+        "query_wo": doc["query_wo"],
+        "query_cot": doc["query_cot"],
         "question_for_eval": doc["question_for_eval"],
     }
 

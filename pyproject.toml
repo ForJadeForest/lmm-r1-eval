@@ -7,24 +7,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lmms_eval"
-version = "0.3.0"
+version = "0.3.4"
 authors = [
     { name = "LMMMs-Lab Evaluation Team", email = "lmms-lab@outlook.com" },
 ]
 description = "A framework for evaluating large multi-modality language models"
 readme = "README.md"
+license = { file = "LICENSE" }
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 requires-python = ">=3.8"
-license = { text = "MIT" }
 dependencies = [
     "accelerate>=0.29.1",
-    "black==24.1.0",
-    "isort==5.13.2",
-    "datasets==2.16.1",
+    "black>=24.1.0",
+    "isort>=5.13.2",
+    "datasets>=2.16.1",
     "evaluate>=0.4.0",
     "httpx==0.23.3",
     "jsonlines",
@@ -46,7 +46,7 @@ dependencies = [
     "av",
     "hf_transfer",
     "nltk",
-    "sentencepiece==0.2.0",
+    "sentencepiece",
     "yt-dlp",
     "pycocoevalcap",
     "tqdm-multiprocess",
@@ -71,7 +71,7 @@ dependencies = [
     "decord; platform_system != 'Darwin'",
     "eva-decord; platform_system == 'Darwin'",
     "zss",
-    "protobuf==3.20",
+    "protobuf",
     "sentence_transformers",
     "python-dotenv",
     "vllm==0.8.5",
@@ -114,13 +114,6 @@ mmsearch = [
     "beautifulsoup4",
     "FlagEmbedding",
     "rouge",
-]
-all = [
-    "gemini",
-    "reka",
-    "metrics",
-    "qwen",
-    "mmsearch"
 ]
 
 [tool.setuptools.packages.find]

@@ -9,6 +9,7 @@ import warnings
 from functools import partial
 
 import numpy as np
+import torch
 import yaml
 
 warnings.simplefilter("ignore", category=DeprecationWarning)
@@ -270,17 +271,22 @@ def parse_eval_args() -> argparse.Namespace:
 
 
 def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
-    if not args:
-        args = parse_eval_args()
+    default_args = parse_eval_args()
 
-    # Check if no arguments were passed after parsing
-    if len(sys.argv) == 1:
+    if args is None and len(sys.argv) == 1:
         print("┌───────────────────────────────────────────────────────────────────────────────┐")
         print("│ Please provide arguments to evaluate the model. e.g.                          │")
         print("│ `lmms-eval --model llava --model_path liuhaotian/llava-v1.6-7b --tasks okvqa` │")
         print("│ Use `lmms-eval --help` for more information.                                  │")
         print("└───────────────────────────────────────────────────────────────────────────────┘")
         sys.exit(1)
+
+    # If args were provided, override the defaults
+    if args:
+        for key, value in vars(args).items():
+            setattr(default_args, key, value)
+
+    args = default_args
 
     if args.wandb_args:
         if "name" not in args.wandb_args:
@@ -314,13 +320,17 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
     else:
         args_list.append(args)
 
-    # initialize Accelerator
-    kwargs_handler = InitProcessGroupKwargs(timeout=datetime.timedelta(seconds=60000))
-    accelerator = Accelerator(kwargs_handlers=[kwargs_handler])
-    if accelerator.is_main_process:
-        is_main_process = True
+    # initialize Accelerator only if not already in a distributed context
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        accelerator = None
+        is_main_process = torch.distributed.get_rank() == 0
     else:
-        is_main_process = False
+        kwargs_handler = InitProcessGroupKwargs(timeout=datetime.timedelta(seconds=60000))
+        accelerator = Accelerator(kwargs_handlers=[kwargs_handler])
+        if accelerator.is_main_process:
+            is_main_process = True
+        else:
+            is_main_process = False
 
     for args in args_list:
         try:
@@ -330,7 +340,10 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
             results, samples = cli_evaluate_single(args)
             results_list.append(results)
 
-            accelerator.wait_for_everyone()
+            if accelerator:
+                accelerator.wait_for_everyone()
+            elif torch.distributed.is_available() and torch.distributed.is_initialized():
+                torch.distributed.barrier()
             if is_main_process and args.wandb_args:
                 try:
                     wandb_logger.post_init(results)
@@ -409,7 +422,7 @@ def cli_evaluate_single(args: Union[argparse.Namespace, None] = None) -> None:
         eval_logger.error("Need to specify task to evaluate.")
         sys.exit()
     elif args.tasks == "list":
-        eval_logger.info("Available Tasks:\n - {}".format(f"\n - ".join(sorted(task_manager.list_all_tasks()))))
+        eval_logger.info("Available Tasks:\n - {}".format(f"\n - ".join(sorted(task_manager.all_tasks))))
         sys.exit()
     elif args.tasks == "list_groups":
         eval_logger.info(task_manager.list_all_tasks(list_subtasks=False, list_tags=False))
@@ -495,6 +508,7 @@ def cli_evaluate_single(args: Union[argparse.Namespace, None] = None) -> None:
         fewshot_random_seed=args.seed[3],
         cli_args=args,
         datetime_str=datetime_str,
+        distributed_executor_backend="torchrun" if (torch.distributed.is_available() and torch.distributed.is_initialized()) else "accelerate",
         **request_caching_args,
     )
 

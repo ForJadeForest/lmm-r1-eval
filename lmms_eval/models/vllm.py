@@ -36,13 +36,11 @@ class VLLM(lmms):
         tensor_parallel_size: int = 1,
         gpu_memory_utilization: float = 0.8,
         batch_size: int = 1,
-        timeout: int = 60,
-        max_images: int = 32,
-        max_videos: int = 8,
-        max_audios: int = 8,
         max_frame_num: int = 32,
         threads: int = 16,  # Threads to use for decoding visuals
         trust_remote_code: Optional[bool] = True,
+        chat_template: Optional[str] = None,
+        min_image_pixels: int = 28,  # minimum image dimension, required for Qwen 2/2.5-VL models
         **kwargs,
     ) -> None:
         super().__init__()
@@ -50,26 +48,32 @@ class VLLM(lmms):
         # and split the text and image
         # Here we just use the same token as llava for convenient
         self.model_version = model_version
-        self.max_images = max_images
         self.max_frame_num = max_frame_num
         self.threads = threads
+        self.chat_template = chat_template
+        self.min_image_pixels = min_image_pixels
+        # Qwen 2/2.5-VL models enforce minimum image dimensions
+        self._enforce_image_resize = self._is_qwen_vl_model(model_version)
 
-        init_params = ["model_version", "tensor_parallel_size", "gpu_memory_utilization", "batch_size", "timeout", "max_images", "max_videos", "max_audios", "max_frame_num", "threads", "trust_remote_code"]
+        # Convert any string arguments that start with { and end with } to dictionaries
+        for key, value in kwargs.items():
+            if isinstance(value, str) and value.strip().startswith("{") and value.strip().endswith("}"):
+                try:
+                    kwargs[key] = json.loads(value)
+                except json.JSONDecodeError:
+                    eval_logger.warning(f"Failed to parse JSON-like string for argument '{key}': {value}")
 
-        # filter out the parameters already defined in __init__ to pass options to VLLM
-        # this enables support for all VLLM Engine args:
-        # https://github.com/vllm-project/vllm/blob/3147586ebdb36ceae653e9dceec8cf9922fe2c28/vllm/engine/arg_utils.py#L93
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k not in init_params}
-
-        accelerator = Accelerator()
+        # Set up vllm client
+        os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
         self.client = LLM(
             model=self.model_version,
             tensor_parallel_size=tensor_parallel_size,
             gpu_memory_utilization=gpu_memory_utilization,
-            limit_mm_per_prompt={"image": max_images, "video": max_videos, "audio": max_audios},
             trust_remote_code=trust_remote_code,
-            **filtered_kwargs,
+            **kwargs,
         )
+
+        accelerator = Accelerator()
         if accelerator.num_processes > 1:
             assert accelerator.distributed_type in [DistributedType.FSDP, DistributedType.MULTI_GPU, DistributedType.DEEPSPEED], "Unsupported distributed type provided. Only DDP and FSDP are supported."
             self.accelerator = accelerator
@@ -85,6 +89,24 @@ class VLLM(lmms):
         self.device = self.accelerator.device
         self.batch_size_per_gpu = int(batch_size)
 
+    def _is_qwen_vl_model(self, model_version: str) -> bool:
+        qwen_vl_patterns = ["qwen2-vl", "qwen2.5-vl"]
+        return any(pattern in model_version.lower() for pattern in qwen_vl_patterns)
+
+    def _maybe_resize_image(self, img: Image.Image) -> Image.Image:
+        # edge‐case validation
+        if self.min_image_pixels <= 0:
+            return img
+        if min(img.size) <= 0:
+            raise ValueError(f"Invalid image dimensions: {img.size}")
+
+        if not self._enforce_image_resize or min(img.size) >= self.min_image_pixels:
+            return img
+
+        scale = self.min_image_pixels / min(img.size)  # maintain original aspect ratio
+        new_size = tuple(int(dim * scale) for dim in img.size)
+        return img.resize(new_size, Image.BICUBIC)
+
     # Function to encode the image
     def encode_image(self, image: Union[Image.Image, str]):
         if isinstance(image, str):
@@ -92,6 +114,7 @@ class VLLM(lmms):
         else:
             img = image.copy()
 
+        img = self._maybe_resize_image(img)
         output_buffer = BytesIO()
         img.save(output_buffer, format="PNG")
         byte_data = output_buffer.getvalue()
@@ -115,6 +138,7 @@ class VLLM(lmms):
         base64_frames = []
         for frame in frames:
             img = Image.fromarray(frame)
+            img = self._maybe_resize_image(img)
             output_buffer = BytesIO()
             img.save(output_buffer, format="PNG")
             byte_data = output_buffer.getvalue()
@@ -126,8 +150,10 @@ class VLLM(lmms):
     def flatten(self, input):
         new_list = []
         for i in input:
-            for j in i:
-                new_list.append(j)
+            if isinstance(i, (list, tuple)):
+                new_list.extend(i)
+            else:
+                new_list.append(i)
         return new_list
 
     def generate_until(self, requests) -> List[str]:
@@ -179,12 +205,19 @@ class VLLM(lmms):
                 messages = [{"role": "user", "content": []}]
                 # When there is no image token in the context, append the image to the text
                 messages[0]["content"].append({"type": "text", "text": contexts})
-                for img in imgs:
+                for img in self.flatten(imgs):
                     messages[0]["content"].append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}})
 
                 batched_messages.append(messages)
 
-            response = self.client.chat(sampling_params=sampling_params, messages=batched_messages)
+            sampling_params = SamplingParams(**params)
+
+            if self.chat_template is not None:
+                with open(self.chat_template, "r") as f:
+                    chat_template = f.read()
+                response = self.client.chat(sampling_params=sampling_params, messages=batched_messages, chat_template=chat_template)
+            else:
+                response = self.client.chat(sampling_params=sampling_params, messages=batched_messages)
             response_text = [o.outputs[0].text for o in response]
 
             assert len(response_text) == len(batch_requests)
