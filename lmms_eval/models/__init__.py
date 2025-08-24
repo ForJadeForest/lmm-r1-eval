@@ -75,6 +75,7 @@ AVAILABLE_MODELS = {
     "vora": "VoRA",
     "qwen2_5_vl_vllm": "Qwen2_5_VL_VLLM",
     "vllm_r1": "VLLMR1",
+    "code_qwen2_5_vl": "CodeQwen2_5_VL",
 }
 
 
