@@ -5,3 +5,4 @@ task:
 metadata:
   version: 0.0
   quick_extract: false
+  gpt_eval_model_name: ""

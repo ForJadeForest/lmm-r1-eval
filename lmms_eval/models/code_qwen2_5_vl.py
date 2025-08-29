@@ -141,9 +141,66 @@ def get_tool_description() -> list:
     ]
     return tool_description
 
+def get_tool_description_v2() -> list:
+    tool_description = [
+        {
+            "type": "function",
+            "function": {
+                "name": "excute_python_code_in_jupyter",
+                "description": """Execute Python code in a persistent Jupyter environment to solve a wide variety of problems. This powerful tool runs code and returns results and error information.
+
+**Persistent Environment**: This is a stateful Jupyter notebook environment where:
+- Variables and data structures persist between code executions
+- Previously imported libraries remain available for reuse
+- Functions and classes you define are remembered
+- You can build upon previous computations step by step
+
+Python code is incredibly versatile and can help you solve numerous types of problems:
+1. **Mathematical & Scientific Computing**: Perform complex calculations, solve equations, statistical analysis, linear algebra operations using libraries like NumPy, SciPy, SymPy. If you are doing math question;
+2. **Data Analysis & Visualization**: Process datasets, create charts and graphs, analyze trends using Pandas, Matplotlib, Plotly, Seaborn.
+3. **Image Processing**: Load, manipulate, crop, rotate, enhance contrast, adjust brightness, apply filters, detect features using PIL. You can use img.show() to display results.
+Don't limit your imagination - if there's a problem that can be solved computationally, Python likely has the tools to tackle it!
+""",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "string",
+                            "description": "The Python code for a single Jupyter cell that you need to run",
+                        }
+                    },
+                    "required": ["code"],
+                },
+            },
+        }
+    ]
+    return tool_description
+
+def get_tool_description_v3() -> list:
+    tool_description = [
+        {
+            "type": "function",
+            "function": {
+                "name": "excute_python_code_in_jupyter",
+                "description": "Execute Python code in a persistent Jupyter environment to solve a wide variety of problems. This powerful tool runs code and returns results and error information.\n\n**Persistent Environment**: This is a stateful Jupyter notebook environment where:\n- Variables and data structures persist between code executions\n- Previously imported libraries remain available for reuse\n- Functions and classes you define are remembered\n- You can build upon previous computations step by step\n- Commonly used packages such as matplotlib, scipy, pandas, and seaborn are already installed\n- You can get all output (including the image output) of jupyter cell. \n\nPython code is incredibly versatile and can help you solve numerous types of problems:\n1. **Mathematical & Scientific Computing**: Perform complex calculations, solve equations, statistical analysis, linear algebra operations using libraries like NumPy, SciPy, SymPy. If you are doing math question;\n2. **Data Analysis & Visualization**: Process datasets, create charts and graphs, analyze trends using Pandas, Matplotlib, Plotly, Seaborn.\n3. **Image Processing**: Load, manipulate, crop, rotate, enhance contrast, adjust brightness, apply filters, detect features using PIL. You can use img.show() to display results.",  # noqa: E501
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "string",
+                            "description": "The Python code for a single Jupyter cell that you need to run",
+                        }
+                    },
+                    "required": ["code"],
+                },
+            },
+        }
+    ]
+    return tool_description
+
 
 def get_system_prompt() -> str:
-    tool_description = get_tool_description()
+    tool_description = get_tool_description_v3()
     system_message = f"""You are a helpful assistant.
 
 # Tools
@@ -158,7 +215,8 @@ You are provided with function signatures within <tools></tools> XML tags:
 For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
 <tool_call>
 {{"name": <function-name>, "arguments": <args-json-object>}}
-</tool_call>"""
+</tool_call>
+"""
 
     return system_message
 
@@ -257,6 +315,8 @@ class CodeQwen2_5_VL(lmms):
         self.max_turn = max_turn
 
     def encode_image(self, image):
+        if image.mode == "RGBA":
+            image = image.convert("RGB")
         output_buffer = BytesIO()
         image.save(output_buffer, format="JPEG")
         byte_data = output_buffer.getvalue()
@@ -344,7 +404,7 @@ class CodeQwen2_5_VL(lmms):
                         ]
                     )
 
-                if response_num == self.max_turn - 1:
+                if response_num == self.max_turn - 2:
                     messages[-1]["content"].append(
                         {
                             "type": "text",
@@ -359,6 +419,8 @@ class CodeQwen2_5_VL(lmms):
 
     def _process_single_request(self, request_args):
         """Process a single request - helper method for multithreading"""
+        """Instance(request_type='generate_until', arguments=('Please first conduct reasoning, and then answer the question and provide the correct option letter, e.g., A, B, C, D, at the end.\nQuestion: In the diagram above, angle A is congruent to angle BED, and angle C is congruent to angle D. If the ratio of the length of AB to the length of EB is 5:1, and the area of the triangle BED is 5*a^2 + 10, what is the area of triangle ABC?\nChoices:\nA.5*a^2 + 10\nB.25*a^2 + 50\nC.25*a^2 + 100\nD.125*a^2 + 250\nE.cannot be determined', {'max_new_tokens': 4096, 'temperature': 0.0, 'repetition_penalty': 1.0, 'until': ['\n\n']}, <bound method ConfigurableTask.doc_to_visual of ConfigurableTask(task_name=mathverse_testmini,output_type=generate_until,num_fewshot=0,num_samples=3940)>, 3938, 'mathverse_testmini', 'testmini'), idx=0, metadata={'task': 'mathverse_testmini', 'doc_id': 3938, 'repeats': 1, 'split': 'testmini'}, resps=[], filtered_resps={}, task_name='mathverse_testmini', doc_id=3938, repeats=1, doc=None)
+        """
         contexts, gen_kwargs, doc_to_visual, doc_id, task, split = request_args
 
         visuals = [doc_to_visual(self.task_dict[task][split][doc_id])]

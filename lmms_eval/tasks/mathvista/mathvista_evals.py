@@ -168,7 +168,7 @@ class MathVistaEvaluator:
             "Content-Type": "application/json",
         }
         client = OpenAI(api_key=API_KEY, base_url=API_URL.rstrip("chat/completions"))
-        gpt_model = config["metadata"]["gpt_eval_model_name"]
+        gpt_model = os.getenv("MODEL_VERSION", config["metadata"]["gpt_eval_model_name"])
 
     elif API_TYPE == "azure":
         API_URL = os.getenv("AZURE_ENDPOINT", "https://api.cognitive.microsoft.com/sts/v1.0/issueToken")
@@ -323,8 +323,8 @@ class MathVistaEvaluator:
                 extraction = None
 
         elif answer_type == "float":
-            try:
-                extraction = str(round(float(extraction), precision))
+            try: # fix bug:str(round(float("2372.1"), 1.0))
+                extraction = str(round(float(extraction), int(precision)))
             except:
                 extraction = None
 
