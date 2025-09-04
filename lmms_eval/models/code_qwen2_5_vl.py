@@ -221,16 +221,27 @@ For each function call, return a json object with function name and arguments wi
     return system_message
 
 
-def get_upload_image_prompt(upload_img_paths: Union[list, str]) -> str:
+def get_upload_image_prompt(upload_img_paths: list | str) -> str:
     """Get the prompt for uploading an image."""
     if isinstance(upload_img_paths, str):
         upload_img_paths = [upload_img_paths]
     img_path_text = ""
     for i, img_path in enumerate(upload_img_paths):
-        img_path_text += f"Picture {i} path: {img_path}\n"
+        img_path_text += f'Picture {i} path: "{img_path}"\n'
 
     question_prefix = f"I have upload the following images:\n{img_path_text}\n\n"
     return question_prefix
+
+def query_template(question: str, sandbox_image_path: list[str] | str, need_picture_text: bool = True):
+    if isinstance(sandbox_image_path, str):
+        sandbox_image_path = [sandbox_image_path]
+    image_text = ''.join([f'Picture {i}: <image>\n' for i in range(len(sandbox_image_path))]) if need_picture_text else ""
+    return f"""{get_upload_image_prompt(sandbox_image_path)}{image_text}
+Now please answer the following question:
+{question}
+Please answer in the following format:
+<think>...</think>
+<answer>...</answer>""".strip()
 
 
 def extract_code_from_response(response_text: str) -> str:
@@ -446,25 +457,11 @@ class CodeQwen2_5_VL(lmms):
                     img_paths.append(f"/mnt/data/{str(uuid.uuid4())}.jpg")
 
         message = [{"role": "system", "content": self.system_message}]
-        img_path_text = ""
-        for i, img_path in enumerate(img_paths):
-            img_path_text += f"Picture {i}: {img_path}\n"
-
-        question_prefix = f"I have upload the following images:\n{img_path_text}\n\n"
-
-        user_content = []
-        user_content.append({"type": "text", "text": question_prefix})
+        
+        user_text = query_template(question=contexts, sandbox_image_path=img_paths)
+        user_content = [{"type": "text", "text": user_text}]
         for i, img in enumerate(imgs):
-            user_content.append({"type": "text", "text": f"Picture {i}:"})
             user_content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}})
-        answer_format = f"""
-        Now please answer the following question:
-        {contexts}
-        Please answer in the following format:
-        <think>...</think>
-        <answer>...</answer>
-        """
-        user_content.append({"type": "text", "text": answer_format})
         message.append({"role": "user", "content": user_content})  # type: ignore
 
         gen_kwargs = {
