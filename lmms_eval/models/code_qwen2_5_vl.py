@@ -453,10 +453,18 @@ class CodeQwen2_5_VL(lmms):
         question_prefix = f"I have upload the following images:\n{img_path_text}\n\n"
 
         user_content = []
-        user_content.append({"type": "text", "text": question_prefix + contexts})
+        user_content.append({"type": "text", "text": question_prefix})
         for i, img in enumerate(imgs):
             user_content.append({"type": "text", "text": f"Picture {i}:"})
             user_content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}})
+        answer_format = f"""
+        Now please answer the following question:
+        {contexts}
+        Please answer in the following format:
+        <think>...</think>
+        <answer>...</answer>
+        """
+        user_content.append({"type": "text", "text": answer_format})
         message.append({"role": "user", "content": user_content})  # type: ignore
 
         gen_kwargs = {
